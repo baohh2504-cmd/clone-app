@@ -1,0 +1,52 @@
+{
+    "meta": {
+        "schema_version": "1.1.0",
+        "awf_version": "3.3.0"
+    },
+    "project": {
+        "name": "Clone App ULTRA",
+        "type": "Desktop Application",
+        "status": "In Development"
+    },
+    "tech_stack": {
+        "frontend": {
+            "framework": "Electron",
+            "language": "JavaScript/HTML/CSS",
+            "path": "source/ui"
+        },
+        "backend": {
+            "framework": "Python",
+            "type": "Launcher/Service",
+            "path": "source/launcher"
+        },
+        "database": {
+            "type": "JSON/File-based",
+            "notes": "Uses JSON files for storing clones and user data"
+        }
+    },
+    "features": [
+        {
+            "name": "Clone Management",
+            "description": "Manage multiple application clones",
+            "status": "Active"
+        },
+        {
+            "name": "Profile Management",
+            "description": "User profile isolation and configuration",
+            "status": "Active"
+        },
+        {
+            "name": "Profile Storage Path Auto-fill",
+            "description": "Automatically populate storage path based on selected profile",
+            "status": "In Progress"
+        }
+    ],
+    "knowledge_items": {
+        "gotchas": [
+            {
+                "issue": "Git missing",
+                "solution": "Project is currently not tracked by git"
+            }
+        ]
+    }
+}

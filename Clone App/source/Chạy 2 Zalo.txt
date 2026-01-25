@@ -1,0 +1,56 @@
+Dưới đây là bản tóm tắt các yêu cầu và hành động bạn đã thực hiện để cấu hình hệ thống Windows theo mong muốn:
+
+---
+
+## 🎯 Mục tiêu
+
+-Chỉ cho phép tài khoản **Admin** cài đặt và sử dụng ứng dụng từ **Microsoft Store**
+-Ngăn chặn các tài khoản người dùng khác (như **PC-2**, **PC-3**) truy cập và sử dụng Microsoft Store
+-Cho phép sử dụng lệnh `runas` để chạy ứng dụng dưới quyền tài khoản khác khi cần thiết
+
+---
+
+## 🔧 Các bước đã thực hiện
+
+### 1. **Kích hoạt dịch vụ Application Identity**
+
+ Mở Command Prompt với quyền quản trị viê.
+ Chạy lện:
+  ```bash
+  sc config "AppIDSvc" start=auto & net start "AppIDSvc"
+  ```
+ Điều này đảm bảo dịch vụ **Application Identity** được bật và đang chạy, cần thiết cho AppLocker hoạt độn.
+
+### 2. **Thiết lập AppLocker để chặn Microsoft Store cho người dùng cụ thể**
+
+ Mở **Local Security Policy** bằng cách nhấn `Windows + R`, nhập `secpol.msc` và nhấn Ente.
+ Điều hướng đế:
+  ```
+  Application Control Policies > AppLocker > Packaged app Rules
+  ```
+ Nhấp chuột phải vào **Packaged app Rules**, chọn **Create New Rule*.
+ Trong trình hướng dẫ:
+   Chọn **Deny** để từ chối quyền truy cậ.
+   Chọn người dùng hoặc nhóm người dùng cần áp dụng quy tắc này (ví dụ: **PC-2**, **PC-3**.
+   Chọn **Use an installed packaged app as a reference**, sau đó chọn ứng dụng **Microsoft Store** từ danh sác.
+   Hoàn tất trình hướng dẫn để tạo quy tắ.
+
+### 3. **Sử dụng lệnh `runas` để chạy ứng dụng dưới quyền tài khoản khác**
+
+ Sử dụng lệnh sau để chạy ứng dụng dưới quyền tài khoản khác (ví dụ: **ZaloUser2**:
+  ```bash
+  C:\Windows\System32\runas.exe /savecred /user:TÊN_MÁY_TÍNH\ZaloUser2 "Đường_dẫn_ứng_dụng"
+  ```
+ Lệnh này cho phép chạy ứng dụng với quyền của tài khoản khác mà không bị ảnh hưởng bởi các quy tắc AppLocker áp dụng cho tài khoản hiện tạ.
+
+---
+
+## ✅ Kết quả đạt được
+
+ Tài khoản **Admin** có toàn quyền sử dụng Microsoft Stor.
+ Tài khoản **PC-2**, **PC-3** bị chặn truy cập và sử dụng Microsoft Stor.
+ Có thể sử dụng lệnh `runas` để chạy ứng dụng dưới quyền tài khoản khác khi cần thiế.
+
+---
+
+Nếu bạn cần hỗ trợ thêm hoặc muốn áp dụng các cấu hình tương tự cho các ứng dụng khác, hãy cho mình biết để được trợ giúp chi tiết hơn! 

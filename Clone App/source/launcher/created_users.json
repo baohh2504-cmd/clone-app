@@ -1,0 +1,186 @@
+{
+  "users": [
+    {
+      "username": "BAO1",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "123",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme1",
+      "defaultProxy": "zeus.proxyngon.com:45905:chanhtin074:Tk6O7oaO",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme2",
+      "defaultProxy": "zeus.proxyngon.com:45905:chanhtin074:Tk6O7oaO",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme3",
+      "defaultProxy": "zeus.proxyngon.com:45905:chanhtin074:Tk6O7oaO",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme4",
+      "defaultProxy": "zeus.proxyngon.com:45905:chanhtin074:Tk6O7oaO",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme5",
+      "defaultProxy": "zeus.proxyngon.com:45905:chanhtin074:Tk6O7oaO",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme6",
+      "defaultProxy": "zeus.proxyngon.com:45905:chanhtin074:Tk6O7oaO",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme7",
+      "defaultProxy": "zeus.proxyngon.com:45905:chanhtin074:Tk6O7oaO",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme8",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme9",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "chameme10",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "bao2",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "azazz1",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "azazz2",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "azazz3",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "azazz4",
+      "defaultProxy": "",
+      "storagePath": ""
+    },
+    {
+      "username": "azazz5",
+      "defaultProxy": "",
+      "storagePath": ""
+    }
+  ],
+  "apps": [
+    {
+      "id": "telegram-bao1-8dada7",
+      "username": "BAO1",
+      "exec_path": "D:\\A Test App Clone\\App\\tele1\\Telegram.exe",
+      "name": "Telegram"
+    },
+    {
+      "id": "zalo-bao1-7a3890",
+      "username": "BAO1",
+      "exec_path": "D:\\A Test App Clone\\App\\zalo1\\Zalo.exe",
+      "name": "Zalo"
+    },
+    {
+      "id": "chrome-123-9871c8",
+      "username": "123",
+      "exec_path": "D:\\A Test App Clone\\App\\123123\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme1-c7d584",
+      "username": "chameme1",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme1\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme2-9b8bd8",
+      "username": "chameme2",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme2\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme3-cff699",
+      "username": "chameme3",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme3\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme4-51b3d0",
+      "username": "chameme4",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme4\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme5-e0b510",
+      "username": "chameme5",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme5\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme6-3f199a",
+      "username": "chameme6",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme6\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme7-80c31b",
+      "username": "chameme7",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme7\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme8-eae900",
+      "username": "chameme8",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme8\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "chrome-chameme10-e4aa5a",
+      "username": "chameme10",
+      "exec_path": "D:\\A Test App Clone\\App\\chameme10\\chrome.exe",
+      "name": "chrome"
+    },
+    {
+      "id": "zalo-bao2-ac1999",
+      "username": "bao2",
+      "exec_path": "D:\\A Test App Clone\\App\\zalobao2\\Zalo.exe",
+      "name": "Zalo"
+    },
+    {
+      "id": "zalo-azazz1-d751f6",
+      "username": "azazz1",
+      "exec_path": "D:\\A Test App Clone\\App\\azazz1\\Zalo.exe",
+      "name": "Zalo"
+    },
+    {
+      "id": "zalo-azazz2-5144fb",
+      "username": "azazz2",
+      "exec_path": "D:\\A Test App Clone\\App\\azazz2\\Zalo.exe",
+      "name": "Zalo"
+    }
+  ]
+}
