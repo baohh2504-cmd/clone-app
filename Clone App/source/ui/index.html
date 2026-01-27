@@ -18,7 +18,13 @@
           colors: {
             "primary": "#135bec",
             "background-light": "#f6f6f8",
-            "background-dark": "#101622",
+            "background-dark": "#050505",
+            "card-dark": "#0a0a0a",
+            "border-dark": "#1f1f1f",
+            "neon-blue": "#00f0ff",
+            "neon-purple": "#bd00ff",
+            "neon-green": "#00ff9d",
+            "neon-amber": "#ffae00",
           },
           fontFamily: {
             "display": ["Inter", "sans-serif"]
@@ -33,42 +39,146 @@
       font-family: 'Inter', sans-serif;
     }
 
-    .hide-scrollbar::-webkit-scrollbar {
-      display: none;
+    /* CYBER GRID BACKGROUND */
+    .bg-grid-pattern {
+      background-color: #050505 !important;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px) !important;
+      background-size: 40px 40px !important;
     }
 
-    .hide-scrollbar {
-      -ms-overflow-style: none;
-      scrollbar-width: none;
+    /* GLASSMORPHISM UTILS */
+    .glass-panel {
+      background: rgba(10, 10, 10, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
-    .toggle-checkbox:checked {
-      right: 0;
-      border-color: #135bec;
+    /* CYBER INPUTS */
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    select,
+    textarea {
+      background-color: rgba(255, 255, 255, 0.03) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      color: white !important;
+      border-radius: 0.5rem !important;
+      transition: all 0.2s ease;
     }
 
-    .toggle-checkbox:checked+.toggle-label {
-      background-color: #135bec;
+    input[type="text"]:focus,
+    input[type="password"]:focus,
+    input[type="number"]:focus,
+    select:focus,
+    textarea:focus {
+      border-color: #00f0ff !important;
+      box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.2) !important;
+      outline: none !important;
+      background-color: rgba(255, 255, 255, 0.05) !important;
     }
 
-    /* UI State Visibility */
-    .view-section {
-      display: none;
-      height: 100%;
-      flex-direction: column;
+    /* FIX SELECT OPTIONS VISIBILITY */
+    select option {
+      background-color: #111722;
+      color: white;
     }
 
-    .view-section.active {
-      display: flex;
+    input::placeholder {
+      color: rgba(255, 255, 255, 0.3) !important;
     }
+
+    /* CYBER MODAL */
+    .modal-content {
+      background-color: rgba(10, 10, 10, 0.95) !important;
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+    }
+
+    /* CHECKBOX OVERRIDE */
+    input[type="checkbox"] {
+      background-color: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    input[type="checkbox"]:checked {
+      background-color: #00f0ff;
+      border-color: #00f0ff;
+      color: #00f0ff;
+      /* Tailwind forms plugin uses color for icon */
+    }
+
+    /* FORCE GLOBAL THIN SCROLLBAR */
+    *::-webkit-scrollbar {
+      width: 4px !important;
+      height: 4px !important;
+    }
+
+    *::-webkit-scrollbar-track {
+      background: transparent !important;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      background-color: rgba(156, 163, 175, 0.5) !important;
+      /* Visible grey */
+      border-radius: 999px !important;
+      border: none !important;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+      background-color: rgba(156, 163, 175, 0.8) !important;
+    }
+
+    /* Hide standard scrollbar to prevent conflict */
+    html,
+    body,
+    div,
+    table {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+
+
+      .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+
+      .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      .toggle-checkbox:checked {
+        right: 0;
+        border-color: #135bec;
+      }
+
+      .toggle-checkbox:checked+.toggle-label {
+        background-color: #135bec;
+      }
+
+      /* UI State Visibility */
+      .view-section {
+        display: none;
+        height: 100%;
+        flex-direction: column;
+      }
+
+      .view-section.active {
+        display: flex;
+      }
   </style>
 </head>
 
-<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display overflow-hidden">
+<body
+  class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display overflow-hidden bg-grid-pattern">
   <div class="flex h-screen w-full overflow-hidden">
     <!-- SIDEBAR -->
     <aside
-      class="w-[280px] shrink-0 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111722] flex flex-col justify-between p-4 z-20">
+      class="w-[280px] shrink-0 border-r border-slate-200 dark:border-white/5 bg-white dark:bg-transparent flex flex-col justify-between p-4 z-20">
       <div class="flex flex-col gap-8">
         <div class="flex items-center gap-3 px-2">
           <div class="size-8 rounded-lg overflow-hidden flex items-center justify-center bg-primary">
@@ -110,12 +220,12 @@
     </aside>
 
     <!-- MAIN CONTENT -->
-    <main class="flex-1 flex flex-col h-full relative overflow-hidden bg-background-light dark:bg-background-dark">
+    <main class="flex-1 flex flex-col h-full relative overflow-hidden bg-transparent">
 
       <!-- VIEW: DASHBOARD (Trang chủ) -->
       <div id="view-dashboard" class="view-section active">
         <header
-          class="flex items-center justify-between border-b border-slate-200 dark:border-[#232f48] px-8 py-5 bg-white dark:bg-[#111722]/95 backdrop-blur z-10 sticky top-0">
+          class="flex items-center justify-between border-b border-slate-200 dark:border-white/5 px-8 py-5 bg-transparent z-10 sticky top-0">
           <div class="flex items-center gap-8 flex-1">
             <h2 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight tracking-tight">Tổng quan</h2>
             <div class="hidden md:flex max-w-md w-full">
@@ -188,14 +298,15 @@
 
             <!-- Create New Card (Always Last) -->
             <button id="btn-create-new-card"
-              class="group flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-[#232f48] p-5 hover:border-primary hover:bg-primary/5 dark:hover:bg-[#232f48]/50 transition-all duration-300 cursor-pointer min-h-[180px]">
+              class="group flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-white/10 dark:border-white/10 bg-white/5 backdrop-blur-sm p-5 hover:border-neon-blue hover:bg-white/10 hover:shadow-[0_0_15px_-3px_rgba(0,240,255,0.3)] transition-all duration-300 cursor-pointer min-h-[140px] aspect-[3/2]">
               <div
-                class="size-14 rounded-full bg-slate-100 dark:bg-[#232f48] group-hover:bg-primary group-hover:text-white text-slate-400 dark:text-[#92a4c9] flex items-center justify-center transition-colors">
+                class="size-14 rounded-full bg-white/5 group-hover:bg-neon-blue group-hover:text-black text-slate-400 dark:text-[#92a4c9] flex items-center justify-center transition-colors shadow-inner border border-white/5">
                 <span class="material-symbols-outlined text-[28px]">add</span>
               </div>
               <div class="flex flex-col items-center text-center gap-1">
-                <h3 class="text-slate-900 dark:text-white text-base font-semibold">Tạo bản sao mới</h3>
-                <p class="text-slate-500 dark:text-[#92a4c9] text-xs">Nhân bản ứng dụng ngay</p>
+                <p class="text-sm font-bold text-slate-300 group-hover:text-neon-blue transition-colors">Tạo bản sao mới
+                </p>
+                <p class="text-[11px] text-slate-500 font-mono">Thêm Profile & Clone App</p>
               </div>
             </button>
           </div>
@@ -205,7 +316,7 @@
       <!-- VIEW: ADD SINGLE (Thêm ứng dụng đơn) -->
       <div id="view-add-single" class="view-section">
         <header
-          class="flex items-center justify-between border-b border-slate-200 dark:border-[#232f48] px-8 py-5 bg-white dark:bg-[#111722]/95 backdrop-blur z-10 sticky top-0">
+          class="flex items-center justify-between border-b border-slate-200 dark:border-white/5 px-8 py-5 bg-transparent z-10 sticky top-0">
           <div class="flex items-center gap-4 flex-1">
             <button id="btn-back-from-single"
               class="flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-[#232f48] text-slate-500 dark:text-[#92a4c9] transition-colors">
@@ -217,17 +328,16 @@
         </header>
         <div class="flex-1 overflow-y-auto p-8">
           <div class="max-w-5xl mx-auto space-y-6">
-            <div
-              class="bg-white dark:bg-[#192233] p-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex gap-1 shadow-sm w-fit mb-8">
+            <div class="glass-panel p-1.5 rounded-xl flex gap-1 shadow-sm w-fit mb-8">
               <button id="mode-single"
-                class="px-6 py-2 rounded-lg bg-primary text-white shadow-sm transition-all text-sm font-semibold">Chế độ
+                class="px-6 py-2 rounded-lg bg-neon-blue/20 text-neon-blue border border-neon-blue shadow-[0_0_10px_rgba(0,240,255,0.3)] transition-all text-sm font-bold uppercase tracking-wider">Chế
+                độ
                 Đơn</button>
               <button id="mode-switch-batch"
-                class="px-6 py-2 rounded-lg text-slate-600 dark:text-[#92a4c9] hover:bg-slate-100 dark:hover:bg-[#232f48] transition-all text-sm font-medium">Hàng
+                class="px-6 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all text-sm font-medium">Hàng
                 Loạt</button>
             </div>
-            <div
-              class="bg-white dark:bg-[#192233] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 min-h-[500px]">
+            <div class="glass-panel rounded-xl p-8 min-h-[500px]">
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-6">
                   <div class="space-y-2">
@@ -325,7 +435,7 @@
       <!-- VIEW: BATCH ADD (Thêm hàng loạt) -->
       <div id="view-batch-add" class="view-section">
         <header
-          class="flex items-center justify-between border-b border-slate-200 dark:border-[#232f48] px-8 py-5 bg-white dark:bg-[#111722]/95 backdrop-blur z-10 sticky top-0">
+          class="flex items-center justify-between border-b border-slate-200 dark:border-white/5 px-8 py-5 bg-transparent z-10 sticky top-0">
           <div class="flex items-center gap-4 flex-1">
             <button id="btn-back-from-batch"
               class="flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-[#232f48] text-slate-500 dark:text-[#92a4c9] transition-colors">
@@ -337,17 +447,16 @@
         </header>
         <div class="flex-1 overflow-y-auto p-8 hide-scrollbar">
           <div class="max-w-5xl mx-auto space-y-6">
-            <div
-              class="bg-white dark:bg-[#192233] p-1.5 rounded-xl border border-slate-200 dark:border-slate-800 flex gap-1 shadow-sm w-fit mb-8">
+            <div class="glass-panel p-1.5 rounded-xl flex gap-1 shadow-sm w-fit mb-8">
               <button id="mode-switch-single"
-                class="px-6 py-2 rounded-lg text-slate-600 dark:text-[#92a4c9] hover:bg-slate-100 dark:hover:bg-[#232f48] transition-all text-sm font-medium">Chế
+                class="px-6 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all text-sm font-medium">Chế
                 độ Đơn</button>
               <button id="mode-batch"
-                class="px-6 py-2 rounded-lg bg-primary text-white shadow-sm transition-all text-sm font-semibold">Hàng
+                class="px-6 py-2 rounded-lg bg-neon-blue/20 text-neon-blue border border-neon-blue shadow-[0_0_10px_rgba(0,240,255,0.3)] transition-all text-sm font-bold uppercase tracking-wider">Hàng
                 Loạt</button>
             </div>
             <div
-              class="bg-white dark:bg-[#192233] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+              class="glass-panel rounded-xl border border-white/5 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
 
               <div class="p-8">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -357,7 +466,7 @@
                       <h3 class="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Nguồn ứng
                         dụng</h3>
                     </div>
-                    <div class="space-y-4">
+                    <div class="space-y-6">
                       <div class="space-y-2">
                         <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Đường dẫn app gốc</label>
                         <div class="flex gap-2">
@@ -371,8 +480,8 @@
                       <div class="space-y-2">
                         <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Tên file .exe</label>
                         <input id="batch-exe-name" list="batch-exe-suggestions"
-                          class="w-full bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary dark:text-white placeholder:text-slate-400"
-                          placeholder="Nhập hoặc chọn tên file .exe" type="text" />
+                          class="w-full bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary dark:text-white"
+                          placeholder="Nhập hoặc chọn tên file .exe" />
                         <datalist id="batch-exe-suggestions">
                           <!-- Options populated by JS -->
                         </datalist>
@@ -492,10 +601,9 @@
       <!-- VIEW: SETTINGS (Cài đặt ứng dụng - Dynamic) -->
       <div id="view-settings" class="view-section">
         <header
-          class="flex items-center justify-between border-b border-slate-200 dark:border-[#232f48] px-8 py-5 bg-white dark:bg-[#111722]/95 backdrop-blur z-10 sticky top-0">
+          class="flex items-center justify-between border-b border-slate-200 dark:border-white/5 px-8 py-5 bg-transparent z-10 sticky top-0">
           <div class="flex items-center gap-4 flex-1">
-            <h2 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight tracking-tight">Cài đặt Ứng dụng
-            </h2>
+            <h2 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight tracking-tight">Cài đặt</h2>
           </div>
           <div class="flex items-center gap-4">
             <button class="relative size-10 rounded-full overflow-hidden border border-slate-200 dark:border-[#232f48]">
@@ -506,10 +614,9 @@
         </header>
 
         <div class="flex-1 overflow-y-auto p-8 hide-scrollbar">
-          <div class="max-w-5xl mx-auto space-y-6">
+          <div class="glass-panel p-8 rounded-xl max-w-6xl mx-auto space-y-10 min-h-[700px]">
             <!-- Create User Form -->
-            <div
-              class="bg-white dark:bg-[#192233] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
+            <div class="bg-transparent space-y-6">
               <div class="flex items-start gap-4">
                 <div
                   class="size-10 rounded-lg bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center shrink-0">
@@ -562,10 +669,7 @@
                       <input type="text" id="setting-user-name"
                         class="flex-1 bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary dark:text-white"
                         placeholder="Username">
-                      <button id="btn-generate-user-setting"
-                        class="px-3 bg-slate-100 dark:bg-[#232f48] border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#2d3b55]">
-                        <span class="material-symbols-outlined text-[20px]">person_add</span>
-                      </button>
+                      <!-- Button Removed -->
                     </div>
 
                     <input type="password" id="setting-user-pass"
@@ -587,10 +691,8 @@
             </div>
 
             <!-- User List -->
-            <div
-              class="bg-white dark:bg-[#192233] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-              <div
-                class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-[#111722]/50">
+            <div class="bg-transparent border-t border-white/10 pt-6">
+              <div class="px-2 py-4 flex justify-between items-center">
                 <div class="flex items-center gap-3">
                   <div
                     class="size-8 rounded-lg bg-green-50 dark:bg-green-900/20 flex items-center justify-center shrink-0">
@@ -604,9 +706,9 @@
                   Tải lại
                 </button>
               </div>
-              <div class="overflow-x-auto max-h-[320px] overflow-y-auto scrollbar-thin">
+              <div class="overflow-x-auto h-[400px] overflow-y-auto border border-white/10 rounded-lg">
                 <table class="w-full text-left border-collapse">
-                  <thead class="sticky top-0 bg-white dark:bg-[#192233]">
+                  <thead class="sticky top-0 bg-[#0a0a0a] z-10">
                     <tr class="border-b border-slate-200 dark:border-slate-800">
                       <th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/3">Profile
                       </th>
@@ -658,7 +760,7 @@
       <!-- VIEW: APP SETTINGS (Cài đặt chi tiết từng ứng dụng) -->
       <div id="view-app-settings" class="view-section">
         <header
-          class="flex items-center justify-between border-b border-slate-200 dark:border-[#232f48] px-8 py-5 bg-white dark:bg-[#111722]/95 backdrop-blur z-10 sticky top-0">
+          class="flex items-center justify-between border-b border-slate-200 dark:border-white/5 px-8 py-5 bg-transparent z-10 sticky top-0">
           <div class="flex items-center gap-4 flex-1">
             <button id="btn-back-from-app-settings"
               class="flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-[#232f48] text-slate-500 dark:text-[#92a4c9] transition-colors">
@@ -680,145 +782,154 @@
         </header>
 
         <div class="flex-1 overflow-y-auto p-8 hide-scrollbar">
-          <div class="max-w-5xl mx-auto space-y-6">
-            <!-- Info Section -->
-            <div
-              class="bg-white dark:bg-[#192233] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
-              <div class="flex items-center gap-2 mb-2">
-                <span class="material-symbols-outlined text-blue-500">info</span>
-                <h3 class="text-base font-bold text-slate-900 dark:text-white">Thông tin hiển thị</h3>
-              </div>
-              <div class="flex gap-4 items-center">
-                <div
-                  class="size-16 rounded-lg bg-slate-100 dark:bg-[#232f48] flex items-center justify-center border border-slate-200 dark:border-slate-700 shrink-0">
-                  <img id="app-settings-icon" src="" class="w-10 h-10 object-contain" alt="Icon">
+          <!-- Fixed Panel Container -->
+          <div class="glass-panel rounded-xl max-w-6xl mx-auto h-[calc(100vh-140px)] flex flex-col overflow-hidden">
+            <!-- Scrollable Content -->
+            <div class="flex-1 overflow-y-auto p-8 space-y-10 custom-scrollbar">
+              <!-- Info Section -->
+              <div class="bg-transparent space-y-4">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="material-symbols-outlined text-blue-500">info</span>
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white">Thông tin hiển thị</h3>
                 </div>
-                <div class="flex-1">
-                  <div class="flex items-center gap-4">
-                    <div class="flex-1 space-y-1">
-                      <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tên hiển thị</label>
-                      <input type="text" id="app-settings-name"
-                        class="w-full bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-primary dark:text-white h-8">
+                <div class="flex gap-4 items-center">
+                  <div
+                    class="size-16 rounded-lg bg-slate-100 dark:bg-[#232f48] flex items-center justify-center border border-slate-200 dark:border-slate-700 shrink-0">
+                    <img id="app-settings-icon" src="" class="w-10 h-10 object-contain" alt="Icon">
+                  </div>
+                  <div class="flex-1">
+                    <div class="flex items-center gap-4">
+                      <div class="flex-1 space-y-1">
+                        <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tên hiển
+                          thị</label>
+                        <input type="text" id="app-settings-name"
+                          class="w-full bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-primary dark:text-white h-8">
+                      </div>
+
                     </div>
-
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Technical Section -->
-            <div
-              class="bg-white dark:bg-[#192233] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
-              <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-blue-500">tune</span>
-                <h3 class="text-base font-bold text-slate-900 dark:text-white">Cấu hình kỹ thuật</h3>
-              </div>
-
-              <div class="space-y-2">
-                <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Đường dẫn file gốc (.exe)</label>
-                <div class="flex gap-2">
-                  <input type="text" id="app-settings-path"
-                    class="flex-1 bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary dark:text-white"
-                    readonly>
-                  <button
-                    class="px-4 bg-slate-100 dark:bg-[#232f48] border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#2d3b55] text-sm font-medium">Chọn
-                    file</button>
-                </div>
-              </div>
-
-              <div class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
-                <div>
-                  <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Group</h4>
-                  <p class="text-xs text-slate-500 mb-3">Chọn Group cho ứng dụng này</p>
-                  <div id="app-settings-groups" class="flex flex-wrap gap-2">
-                    <!-- Group checkboxes will be rendered by JS -->
                   </div>
                 </div>
               </div>
 
-              <div class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+              <!-- Technical Section -->
+              <div class="bg-transparent border-t border-white/10 pt-6 space-y-6">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-blue-500">tune</span>
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white">Cấu hình kỹ thuật</h3>
+                </div>
+
+                <div class="space-y-2">
+                  <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Đường dẫn file gốc
+                    (.exe)</label>
+                  <div class="flex gap-2">
+                    <input type="text" id="app-settings-path"
+                      class="flex-1 bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary dark:text-white"
+                      readonly>
+                    <button
+                      class="px-4 bg-slate-100 dark:bg-[#232f48] border border-slate-200 dark:border-slate-700 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-[#2d3b55] text-sm font-medium">Chọn
+                      file</button>
+                  </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                  <div>
+                    <h4 class="text-sm font-bold text-slate-900 dark:text-white mb-2">Group</h4>
+                    <p class="text-xs text-slate-500 mb-3">Chọn Group cho ứng dụng này</p>
+                    <div id="app-settings-groups" class="flex flex-wrap gap-2">
+                      <!-- Group checkboxes will be rendered by JS -->
+                    </div>
+                  </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h4 class="text-sm font-bold text-slate-900 dark:text-white">Cấu hình Proxy</h4>
+                      <p class="text-xs text-slate-500">Sử dụng proxy riêng cho Profile này</p>
+                    </div>
+                    <div
+                      class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                      <input type="checkbox" name="toggle" id="app-settings-proxy-enabled"
+                        class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transform transition-transform duration-200" />
+                      <label for="app-settings-proxy-enabled"
+                        class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-600 cursor-pointer border border-slate-500"></label>
+                    </div>
+                  </div>
+                  <div class="" id="proxy-config-area">
+                    <div class="space-y-2">
+                      <label class="text-xs font-semibold text-slate-500 uppercase">Proxy String
+                        (IP:PORT:USER:PASS)</label>
+                      <div class="relative">
+                        <span
+                          class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[20px]">public</span>
+                        <input type="text" id="app-settings-proxy-string"
+                          class="w-full bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary dark:text-white"
+                          placeholder="192.168.1.1:8080:user:pass">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- System Section -->
+              <div class="bg-transparent border-t border-white/10 pt-6">
+                <div class="flex items-center gap-2 mb-4">
+                  <span class="material-symbols-outlined text-blue-500">settings_system_daydream</span>
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white">Tùy chọn hệ thống</h3>
+                </div>
                 <div class="flex items-center justify-between">
                   <div>
-                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Cấu hình Proxy</h4>
-                    <p class="text-xs text-slate-500">Sử dụng proxy riêng cho Profile này</p>
+                    <h4 class="text-sm font-bold text-slate-900 dark:text-white">Chạy cùng Windows</h4>
+                    <p class="text-xs text-slate-500">Tự động khởi động ứng dụng này khi máy tính bật</p>
                   </div>
                   <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                    <input type="checkbox" name="toggle" id="app-settings-proxy-enabled"
-                      class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" />
-                    <label for="app-settings-proxy-enabled"
-                      class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
-                  </div>
-                </div>
-                <div class="" id="proxy-config-area">
-                  <div class="space-y-2">
-                    <label class="text-xs font-semibold text-slate-500 uppercase">Proxy String
-                      (IP:PORT:USER:PASS)</label>
-                    <div class="relative">
-                      <span
-                        class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[20px]">public</span>
-                      <input type="text" id="app-settings-proxy-string"
-                        class="w-full bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-primary dark:text-white"
-                        placeholder="192.168.1.1:8080:user:pass">
-                    </div>
+                    <input type="checkbox" name="toggle" id="app-settings-autostart"
+                      class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer transform transition-transform duration-200" />
+                    <label for="app-settings-autostart"
+                      class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-600 cursor-pointer border border-slate-500"></label>
                   </div>
                 </div>
               </div>
-            </div>
 
-            <!-- System Section -->
-            <div
-              class="bg-white dark:bg-[#192233] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
-              <div class="flex items-center gap-2 mb-4">
-                <span class="material-symbols-outlined text-blue-500">settings_system_daydream</span>
-                <h3 class="text-base font-bold text-slate-900 dark:text-white">Tùy chọn hệ thống</h3>
+              <!-- Actions Footer (Moved inside scrollable area) -->
+              <div class="flex justify-end gap-3 pt-6 border-t border-white/10 mt-auto">
+                <button id="btn-app-shortcut"
+                  class="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                  <span class="material-symbols-outlined">shortcut</span>
+                  Shortcut
+                </button>
+                <button id="btn-app-kill"
+                  class="px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
+                  <span class="material-symbols-outlined">power_settings_new</span>
+                  Kết thúc
+                </button>
+                <button id="btn-app-delete"
+                  class="px-4 py-3 bg-red-900/80 hover:bg-red-800 text-red-100 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors border border-red-800">
+                  <span class="material-symbols-outlined">delete</span>
+                  Xóa
+                </button>
+                <button id="btn-app-save"
+                  class="px-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-primary/20">
+                  <span class="material-symbols-outlined">save</span>
+                  Lưu
+                </button>
               </div>
-              <div class="flex items-center justify-between">
-                <div>
-                  <h4 class="text-sm font-bold text-slate-900 dark:text-white">Chạy cùng Windows</h4>
-                  <p class="text-xs text-slate-500">Tự động khởi động ứng dụng này khi máy tính bật</p>
-                </div>
-                <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                  <input type="checkbox" name="toggle" id="app-settings-autostart"
-                    class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" />
-                  <label for="app-settings-autostart"
-                    class="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
-                </div>
-              </div>
-            </div>
 
-            <!-- Actions Footer -->
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
-              <button id="btn-app-shortcut"
-                class="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                <span class="material-symbols-outlined">shortcut</span>
-                Shortcut
-              </button>
-              <button id="btn-app-kill"
-                class="px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                <span class="material-symbols-outlined">power_settings_new</span>
-                Kết thúc
-              </button>
-              <button id="btn-app-delete"
-                class="px-4 py-3 bg-red-900/80 hover:bg-red-800 text-red-100 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors border border-red-800">
-                <span class="material-symbols-outlined">delete</span>
-                Xóa
-              </button>
-              <button id="btn-app-save"
-                class="px-4 py-3 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-colors shadow-lg shadow-primary/20">
-                <span class="material-symbols-outlined">save</span>
-                Lưu
-              </button>
             </div>
+            <!-- End Scrollable Content -->
           </div>
+
+
         </div>
       </div>
+  </div>
 
-      <!-- SNACKBAR / TOAST (Optional for Status) -->
-      <div id="status-bar"
-        class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm hidden z-50">
-        Ready
-      </div>
-    </main>
+  <!-- SNACKBAR / TOAST (Optional for Status) -->
+  <div id="status-bar"
+    class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm hidden z-50">
+    Ready
+  </div>
+  </main>
   </div>
 
   <!-- MAIN SCRIPT (Must be loaded last) -->

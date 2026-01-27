@@ -860,6 +860,15 @@ def clone_program_tree(
         )
     if not quiet:
         print(f"Cloned {source_dir} -> {destination}")
+
+    # FIX: Remove VisualElementsManifest.xml to prevent blank icon on Taskbar
+    # This forces Windows to use the embedded icon in the EXE.
+    try:
+        for manifest in destination.glob("*.VisualElementsManifest.xml"):
+            manifest.unlink()
+    except Exception:
+        pass
+
     grant_folder_access(destination, username)
     return destination / exe_path.name, destination
 

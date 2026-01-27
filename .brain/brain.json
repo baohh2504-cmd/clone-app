@@ -38,7 +38,7 @@
         {
             "name": "Profile Storage Path Auto-fill",
             "description": "Automatically populate storage path based on selected profile",
-            "status": "In Progress"
+            "status": "Active"
         }
     ],
     "knowledge_items": {

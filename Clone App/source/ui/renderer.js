@@ -124,6 +124,7 @@ let trackedUserObjects = []; // Full user objects with storagePath
 let groups = [];
 let activeGroupFilters = []; // Array of strings
 let selectedClones = new Set(); // For bulk select feature
+let globalAppSettings = {}; // Cache for fallback
 
 // Saved credentials (stored in localStorage for persistence)
 let savedCredentials = {};
@@ -138,6 +139,11 @@ function loadSavedCredentials() {
     console.warn('Failed to load saved credentials:', e);
     savedCredentials = {};
   }
+}
+
+// Global App Settings Accessor
+function getGlobalAppSetting(key) {
+  return globalAppSettings[key] || "";
 }
 
 function saveSavedCredentials() {
@@ -316,6 +322,7 @@ async function loadAppSettings() {
     const res = await window.launcherAPI.getAppSettings();
     if (res.ok && res.settings) {
       const s = res.settings;
+      globalAppSettings = s; // Cache it
       // Apply to Add Single inputs
       if (els.singleCloneTarget && s.cloneRoot) {
         els.singleCloneTarget.value = s.cloneRoot;
@@ -362,47 +369,112 @@ function initSettingsListeners() {
   });
 
   // Browse Buttons & Manual User Creation
-  els.btnSingleSelectFolder?.addEventListener('click', async () => {
-    const folder = await window.launcherAPI.selectFolder();
-    if (folder) {
-      els.singleStoragePath.value = folder;
-      await window.launcherAPI.updateAppSettings({ cloneRoot: folder });
-    }
-  });
+  if (els.btnSingleSelectFolder) {
+    els.btnSingleSelectFolder.onclick = async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      // Disable button to prevent double clicks
+      els.btnSingleSelectFolder.disabled = true;
+      try {
+        const folder = await window.launcherAPI.selectFolder();
+        if (folder) {
+          els.singleStoragePath.value = folder;
+          await window.launcherAPI.updateAppSettings({ cloneRoot: folder });
+        }
+      } finally {
+        els.btnSingleSelectFolder.disabled = false;
+      }
+    };
+  }
 
   // Settings: Manual Create User
-  els.btnCreateUserSetting?.addEventListener('click', async () => {
-    const u = els.settingNewUserName?.value;
-    const p = els.settingNewUserPass?.value;
-    const Prx = els.settingNewUserProxy?.value;
-    let path = els.settingNewUserPath?.value?.trim();
+  if (els.btnCreateUserSetting) {
+    els.btnCreateUserSetting.onclick = async (e) => {
+      e.stopPropagation();
+      e.preventDefault();
 
-    // Fallback if path is empty but global setting exists
-    if (!path && els.settingUserDataRoot?.value?.trim()) {
-      path = els.settingUserDataRoot.value.trim() + "\\" + u;
-    }
+      const u = els.settingNewUserName?.value;
+      const p = els.settingNewUserPass?.value;
+      const Prx = els.settingNewUserProxy?.value;
+      let path = "";
 
-    if (!u || !p) { showStatus("Vui lòng nhập User và Pass", "error"); return; }
-
-    showLoading("Đang tạo User...");
-    try {
-      const res = await window.launcherAPI.createLocalUser({
-        username: u, password: p, proxy: Prx, profileDir: path
-      });
-      hideLoading();
-      if (res.ok) {
-        showStatus(res.message, "success");
-        loadUsers();
-        els.settingNewUserName.value = "";
-        els.settingNewUserPass.value = "";
-      } else {
-        showStatus(res.message, "error");
+      // Fallback if path is empty but global setting exists
+      if (!path && els.singleStoragePath?.value?.trim()) {
+        path = els.singleStoragePath.value.trim() + "\\" + u;
       }
-    } catch (e) {
-      hideLoading();
-      showStatus(e.message, "error");
+
+      if (!u || !p) {
+        showStatus("Vui lòng nhập User và Pass", "error");
+        return;
+      }
+
+      if (els.btnCreateUserSetting.disabled) return;
+      els.btnCreateUserSetting.disabled = true;
+
+      showLoading("Đang tạo User...");
+      try {
+        const res = await window.launcherAPI.createLocalUser({
+          username: u, password: p, proxy: Prx, profileDir: path
+        });
+        hideLoading();
+        if (res.ok) {
+          showStatus(res.message, "success");
+          loadUsers();
+          els.settingNewUserName.value = "";
+          els.settingNewUserPass.value = "";
+        } else {
+          showStatus(res.message, "error");
+        }
+      } catch (e) {
+        hideLoading();
+        showStatus(e.message, "error");
+      } finally {
+        els.btnCreateUserSetting.disabled = false;
+      }
+    };
+  }
+}
+
+function initAutoFillListeners() {
+  if (!els.singleUsername) return;
+
+  // Use onclick/onchange to avoid duplicate listeners (though addEventListener is standard, we want to be safe)
+  els.singleUsername.onchange = (e) => {
+    const val = e.target.value;
+    const storageInput = els.singleCloneTarget; // This is 'single-clone-target' in Add Single View
+
+    if (!storageInput) return;
+
+    // Reset logic if "NEW_USER" or empty
+    if (!val || val === "NEW_USER") {
+      // Fallback to global default or clear
+      // If we have a global default cached, use it
+      storageInput.value = globalAppSettings.cloneRoot || "";
+      return;
     }
-  });
+
+    const user = trackedUserObjects.find(u => u.username === val);
+    if (user && user.storagePath) {
+      storageInput.value = user.storagePath;
+    } else {
+      // User has no specific path -> use global default
+      // Only overwrite if empty or matches global default (don't overwrite user custom input unless they switch profiles)
+      // Actually per user request: "nó chưa tự động điền". So we should fill it.
+      storageInput.value = globalAppSettings.cloneRoot || "";
+    }
+  };
+
+
+
+  // Also handle Browse Folder in Add Single View to avoid duplicates
+  if (els.btnBrowseFolder) {
+    els.btnBrowseFolder.onclick = async () => {
+      const folder = await window.launcherAPI.selectFolder();
+      if (folder) {
+        if (els.singleCloneTarget) els.singleCloneTarget.value = folder;
+      }
+    };
+  }
 }
 
 function updateUserSelects() {
@@ -546,31 +618,39 @@ function createCloneCardElement(clone) {
   // To keep UI snappy, valid cache or static map is great.
   // Let's rely on extraction primarily for correctness as requested.
 
+  // Minimalist Style: Default no border, Hover Neon Blue
+  const neonBorder = 'hover:border-neon-blue';
+  const shadowColor = 'neon-blue';
+
   const div = document.createElement('div');
-  div.className = "group relative flex flex-col gap-3 rounded-xl bg-white dark:bg-[#192233] p-4 shadow-sm border border-slate-200 dark:border-slate-800 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5 dark:hover:shadow-none transition-all duration-300 aspect-[3/2]";
+  // Card Style: Match 'Create New' button (Glass bg, visible border), Hover Neon Blue
+  div.className = `group relative flex flex-col gap-3 rounded-xl bg-white/5 backdrop-blur-sm p-4 border border-white/10 transition-all duration-300 aspect-[3/2] ${neonBorder} hover:shadow-[0_0_15px_-3px_rgba(0,240,255,0.4)] hover:bg-white/10`;
+
+  // Custom hover shadow for neon glow could be added via style if tailwind dynamic class fails
+  // div.style.boxShadow = ...
 
   const isSelected = selectedClones.has(clone.id);
 
   div.innerHTML = `
         <div class="absolute top-2 left-2 z-10">
-            <input type="checkbox" class="clone-checkbox w-4 h-4 text-primary bg-slate-100 border-slate-300 rounded focus:ring-primary dark:bg-[#111722] dark:border-slate-600 cursor-pointer" ${isSelected ? 'checked' : ''} />
+            <input type="checkbox" class="clone-checkbox w-4 h-4 text-neon-blue bg-slate-800 border-slate-600 rounded focus:ring-neon-blue cursor-pointer" ${isSelected ? 'checked' : ''} />
         </div>
         <div class="absolute top-2 right-2 z-10">
-            <button class="btn-settings size-7 border border-slate-200 dark:border-[#2a3855] hover:bg-slate-50 dark:hover:bg-[#232f48] text-slate-500 dark:text-white rounded-lg flex items-center justify-center transition-colors" title="Cài đặt">
-                <span class="material-symbols-outlined text-[16px]">settings</span>
+            <button class="btn-settings size-8 border border-white/10 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg flex items-center justify-center transition-colors" title="Cài đặt">
+                <span class="material-symbols-outlined text-[18px]">settings</span>
             </button>
         </div>
-        <div class="flex flex-col items-center justify-center gap-2 pt-1">
-            <div class="size-12 rounded-lg bg-blue-100 dark:bg-[#232f48] flex items-center justify-center p-2 shadow-sm">
-                <img id="${iconId}" src="${cachedIcon || defaultIcon}" class="w-full h-full object-contain" alt="Icon">
+        <div class="flex flex-col items-center justify-center gap-2 pt-2 flex-1">
+            <div class="size-14 rounded-xl bg-white/5 flex items-center justify-center p-2 shadow-inner border border-white/5 mb-1 group-hover:scale-110 transition-transform duration-300">
+                <img id="${iconId}" src="${cachedIcon || defaultIcon}" class="w-full h-full object-contain filter drop-shadow-md" alt="Icon">
             </div>
-            <h3 class="text-slate-900 dark:text-white text-sm font-bold leading-tight group-hover:text-primary transition-colors text-center truncate w-full" title="${displayName}">${displayName}</h3>
-            <p class="text-slate-500 dark:text-slate-400 text-[11px] font-medium text-center truncate w-full px-2" title="${clone.username}">${clone.username}</p>
+            <h3 class="text-white text-base font-bold leading-tight group-hover:text-neon-blue transition-colors text-center truncate w-full tracking-wide" title="${displayName}">${displayName}</h3>
+            <p class="text-slate-500 text-xs font-medium text-center truncate w-full px-2 font-mono group-hover:text-slate-300 transition-colors" title="${clone.username}">${clone.username}</p>
         </div>
         <div class="mt-auto w-full pt-1 flex justify-center">
-            <button class="btn-launch w-28 h-8 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-primary/20">
+            <button class="btn-launch w-full h-9 bg-neon-blue/10 hover:bg-neon-blue/30 border border-neon-blue/30 hover:border-neon-blue text-neon-blue hover:text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(0,240,255,0.1)] hover:shadow-[0_0_15px_rgba(0,240,255,0.4)]">
                 <span class="material-symbols-outlined text-[18px]">play_arrow</span>
-                Chạy
+                Launch
             </button>
         </div>
     `;
@@ -1087,20 +1167,10 @@ if (els.btnAppDelete) els.btnAppDelete.onclick = async () => {
   }
 };
 
-els.btnSingleSelectFolder?.addEventListener('click', async () => {
-  const path = await window.launcherAPI.selectFolder();
-  if (path) {
-    els.singleStoragePath.value = path;
-  }
-});
+// [REMOVED] Duplicate listener - main handler in initSettingsListeners()
 
 // Settings Create User Logic
-els.btnGenerateUserSetting?.addEventListener('click', () => {
-  const randomUser = 'user_' + Math.random().toString(36).substring(2, 10);
-  const randomPass = Math.random().toString(36).substring(2, 12) + "A1!";
-  if (els.settingUserName) els.settingUserName.value = randomUser;
-  if (els.settingUserPass) els.settingUserPass.value = randomPass;
-});
+// [REMOVED] Auto-generate user button logic
 
 els.btnCreateUserSetting?.addEventListener('click', async () => {
   const username = els.settingUserName?.value.trim();
@@ -1237,12 +1307,7 @@ els.singleUsername?.addEventListener('change', () => {
     els.singleProxy.value = savedProxy;
   }
 });
-els.btnSingleSelectFolder?.addEventListener('click', async () => {
-  const path = await window.launcherAPI.selectFolder();
-  if (path) {
-    els.singleStoragePath.value = path;
-  }
-});
+// [REMOVED] Duplicate listener - main handler in initSettingsListeners()
 
 els.btnCreateSingle?.addEventListener('click', async () => {
   const username = els.singleUsername.value;
@@ -1797,8 +1862,8 @@ function addGroup(name) {
   saveGroups();
   renderGroupFilterUI();
   renderGroupList();
-  renderSingleGroupSelect(); // Update clone form dropdown in real-time
-  renderBatchGroupSelect(); // Update batch form dropdown in real-time
+  renderSingleGroupSelect(); // Update clone form group dropdown
+  renderBatchGroupSelect(); // Update batch form group dropdown
   showStatus(`Đã thêm Group "${trimmed}"`, "success");
 }
 
@@ -1861,8 +1926,14 @@ els.inputNewGroup?.addEventListener('keypress', (e) => {
 // Initialization
 (async function init() {
   initSettingsListeners();
+  initAutoFillListeners();
   await loadAppSettings();
   await loadGroups();
   await loadUsers();
   await loadClones();
+
+  // Trigger Auto-fill initial state after data is loaded
+  if (els.singleUsername && els.singleUsername.value) {
+    els.singleUsername.dispatchEvent(new Event('change'));
+  }
 })();
