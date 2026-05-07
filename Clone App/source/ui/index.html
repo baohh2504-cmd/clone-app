@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>HHB Space - Manager</title>
+  <title>Clone App - Manager</title>
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
   <link
@@ -140,6 +140,7 @@
     table {
       scrollbar-width: thin;
       scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+    }
 
 
       .hide-scrollbar::-webkit-scrollbar {
@@ -181,13 +182,13 @@
       class="w-[280px] shrink-0 border-r border-slate-200 dark:border-white/5 bg-white dark:bg-transparent flex flex-col justify-between p-4 z-20">
       <div class="flex flex-col gap-8">
         <div class="flex items-center gap-3 px-2">
-          <div class="size-8 rounded-lg overflow-hidden flex items-center justify-center bg-primary">
-            <img id="app-logo" src="" alt="HHB Space" class="w-full h-full object-cover"
+          <div class="size-8 rounded-lg overflow-hidden flex items-center justify-center">
+            <img id="app-logo" src="" alt="Clone App" class="w-full h-full object-cover"
               onerror="this.style.display='none'">
             <span class="material-symbols-outlined text-[20px] text-white logo-fallback">layers</span>
           </div>
           <div class="flex flex-col">
-            <h1 class="text-slate-900 dark:text-white text-base font-bold leading-tight">HHB Space</h1>
+            <h1 class="text-slate-900 dark:text-white text-base font-bold leading-tight">Clone App</h1>
             <p class="text-slate-500 dark:text-[#92a4c9] text-xs font-normal">Manager</p>
           </div>
         </div>
@@ -203,6 +204,11 @@
             <span class="material-symbols-outlined">settings</span>
             <p class="text-sm font-medium leading-normal">Cài đặt</p>
           </button>
+          <button id="nav-update"
+            class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-[#92a4c9] hover:bg-slate-100 dark:hover:bg-[#1a2333] transition-colors text-left w-full">
+            <span class="material-symbols-outlined">system_update_alt</span>
+            <p class="text-sm font-medium leading-normal">Cập nhật</p>
+          </button>
           <button id="nav-account"
             class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-[#92a4c9] hover:bg-slate-100 dark:hover:bg-[#1a2333] transition-colors text-left w-full">
             <span class="material-symbols-outlined">person</span>
@@ -210,13 +216,7 @@
           </button>
         </nav>
       </div>
-      <div class="flex flex-col gap-4">
-        <button
-          class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors w-full">
-          <span class="material-symbols-outlined">logout</span>
-          <p class="text-sm font-medium leading-normal">Đăng xuất</p>
-        </button>
-      </div>
+      <div class="flex flex-col gap-4"></div>
     </aside>
 
     <!-- MAIN CONTENT -->
@@ -249,10 +249,6 @@
               class="hidden sm:flex items-center justify-center gap-2 h-10 px-4 bg-primary hover:bg-primary/90 text-white text-sm font-bold rounded-lg transition-colors shadow-lg shadow-primary/20">
               <span class="material-symbols-outlined text-[20px]">add_circle</span>
               <span>Thêm bản sao</span>
-            </button>
-            <button class="relative size-10 rounded-full overflow-hidden border border-slate-200 dark:border-[#232f48]">
-              <img alt="User" class="object-cover w-full h-full"
-                src="https://ui-avatars.com/api/?name=Admin&background=random" />
             </button>
           </div>
         </header>
@@ -515,7 +511,7 @@
                       <h3 class="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Lưu trữ
                         &amp; Cấu hình</h3>
                     </div>
-                    <div class="space-y-4">
+                    <div class="space-y-6">
                       <div class="space-y-2">
                         <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Thư mục lưu clone</label>
                         <div class="flex gap-2">
@@ -525,6 +521,14 @@
                           <button id="btn-batch-browse-folder"
                             class="px-3 py-2.5 bg-slate-100 dark:bg-[#232f48] hover:bg-slate-200 dark:hover:bg-[#2d3b55] text-slate-700 dark:text-white rounded-lg text-sm font-medium transition-colors border border-slate-200 dark:border-slate-700 whitespace-nowrap">Chọn</button>
                         </div>
+                      </div>
+
+                      <div class="space-y-2">
+                        <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Mật khẩu Profile</label>
+                        <input id="batch-password"
+                          class="w-full bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary dark:text-white placeholder:text-slate-400"
+                          type="password" autocomplete="new-password"
+                          placeholder="Nhập mật khẩu dùng cho tất cả Profile" />
                       </div>
 
                       <div class="space-y-2">
@@ -606,10 +610,6 @@
             <h2 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight tracking-tight">Cài đặt</h2>
           </div>
           <div class="flex items-center gap-4">
-            <button class="relative size-10 rounded-full overflow-hidden border border-slate-200 dark:border-[#232f48]">
-              <img alt="User" class="object-cover w-full h-full"
-                src="https://ui-avatars.com/api/?name=Admin&background=random" />
-            </button>
           </div>
         </header>
 
@@ -639,7 +639,7 @@
                   </div>
                   <div class="space-y-2">
                     <label class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Thư mục lưu trữ</label>
-                    <div class="flex gap-2">
+                    <div class="flex gap-2" style="display:none">
                       <input type="text" id="setting-storage"
                         class="flex-1 bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary dark:text-white"
                         placeholder="Ví dụ: D:\CloneApps">
@@ -668,7 +668,7 @@
                     <div class="flex gap-2">
                       <input type="text" id="setting-user-name"
                         class="flex-1 bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-primary dark:text-white"
-                        placeholder="Username">
+                        placeholder="Tên Profile">
                       <!-- Button Removed -->
                     </div>
 
@@ -720,7 +720,7 @@
                   </thead>
                   <tbody id="user-list-body" class="divide-y divide-slate-200 dark:divide-slate-800">
                     <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td class="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">user_clone_01</td>
+                      <td class="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">profile_clone_01</td>
                       <td class="px-6 py-4">
                         <span
                           class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
@@ -735,7 +735,7 @@
                       </td>
                     </tr>
                     <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      <td class="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">user_clone_02</td>
+                      <td class="px-6 py-4 text-sm font-medium text-slate-900 dark:text-white">profile_clone_02</td>
                       <td class="px-6 py-4">
                         <span
                           class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
@@ -751,6 +751,100 @@
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-update" class="view-section">
+        <header
+          class="flex items-center justify-between border-b border-slate-200 dark:border-white/5 px-8 py-5 bg-transparent z-10 sticky top-0">
+          <div class="flex items-center gap-4 flex-1">
+            <h2 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight tracking-tight">Cập nhật</h2>
+          </div>
+          <div class="flex items-center gap-4">
+          </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-8 hide-scrollbar">
+          <div class="glass-panel p-8 rounded-xl max-w-6xl mx-auto space-y-6 min-h-[700px]">
+            <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-6">
+              <div class="flex items-start gap-4">
+                <div
+                  class="size-12 rounded-xl bg-cyan-50 dark:bg-cyan-900/20 flex items-center justify-center shrink-0 overflow-hidden">
+                  <img src="./assets/icon.png" alt="Clone App" class="w-8 h-8 object-contain"
+                    onerror="this.style.display='none'">
+                </div>
+                <div>
+                  <h3 class="text-xl font-bold text-slate-900 dark:text-white">Cập nhật Clone App</h3>
+                </div>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div
+                  class="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                  <span class="material-symbols-outlined text-[18px]">deployed_code</span>
+                  <span>Hiện tại: <strong id="app-current-version">...</strong></span>
+                </div>
+                <div
+                  class="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                  <span class="material-symbols-outlined text-[18px]">new_releases</span>
+                  <span>Mới nhất: <strong id="update-latest-version">Chưa kiểm tra</strong></span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div
+                class="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-[#111722]/70 p-6 space-y-5">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <p id="update-status-label" class="text-base font-bold text-slate-900 dark:text-white">Chưa kiểm tra</p>
+                    <p id="update-status-detail" class="text-sm text-slate-500 mt-1">Bấm nút bên dưới để kiểm tra phiên bản mới.</p>
+                  </div>
+                  <label
+                    class="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 cursor-pointer select-none">
+                    <input id="auto-update-toggle" type="checkbox"
+                      class="w-4 h-4 text-primary bg-slate-100 border-slate-300 rounded focus:ring-primary dark:bg-[#111722] dark:border-slate-600">
+                    <span class="text-sm font-medium text-slate-700 dark:text-slate-200">Tự động cập nhật</span>
+                  </label>
+                </div>
+                <div class="w-full bg-slate-100 dark:bg-[#0f1724] rounded-full h-2 overflow-hidden">
+                  <div id="update-progress-bar" class="bg-primary h-full rounded-full w-0 transition-all"></div>
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <button id="btn-check-update"
+                    class="px-4 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">system_update</span>
+                    Kiểm tra cập nhật
+                  </button>
+                  <button id="btn-open-update-download"
+                    class="hidden px-4 py-2.5 bg-slate-100 dark:bg-[#232f48] border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+                    Mở trình duyệt tải
+                  </button>
+                  <button id="btn-download-update"
+                    class="hidden px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">download</span>
+                    Tải trong app
+                  </button>
+                  <button id="btn-install-update"
+                    class="hidden px-4 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+                    <span class="material-symbols-outlined text-[18px]">install_desktop</span>
+                    Chạy cài đặt
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-[#111722]/70 p-6 space-y-4">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">article</span>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Ghi chú phiên bản</h3>
+              </div>
+              <div class="rounded-lg bg-slate-50 dark:bg-[#0f1724] border border-slate-200 dark:border-slate-700 p-4 max-h-80 overflow-y-auto">
+                <pre id="update-page-release-notes" class="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300 font-sans">Chưa có ghi chú phát hành. Hãy bấm kiểm tra cập nhật.</pre>
               </div>
             </div>
           </div>
@@ -922,14 +1016,156 @@
 
         </div>
       </div>
-  </div>
 
-  <!-- SNACKBAR / TOAST (Optional for Status) -->
-  <div id="status-bar"
-    class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm hidden z-50">
-    Ready
-  </div>
-  </main>
+      <!-- VIEW: ACCOUNT (Tài khoản & License) -->
+      <div id="view-account" class="view-section">
+        <header
+          class="flex items-center justify-between border-b border-slate-200 dark:border-white/5 px-8 py-5 bg-transparent z-10 sticky top-0">
+          <div class="flex items-center gap-4 flex-1">
+            <button id="btn-back-from-account"
+              class="flex items-center justify-center size-8 rounded-lg hover:bg-slate-100 dark:hover:bg-[#232f48] text-slate-500 dark:text-[#92a4c9] transition-colors">
+              <span class="material-symbols-outlined">arrow_back</span>
+            </button>
+            <h2 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight tracking-tight">Tài khoản &
+              Truy cập
+            </h2>
+          </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-8">
+          <div class="glass-panel rounded-xl max-w-4xl mx-auto p-8 space-y-8">
+
+            <!-- License Status Section -->
+            <div class="space-y-4">
+              <div class="flex items-center gap-2 mb-4">
+                <span class="material-symbols-outlined text-neon-blue">verified</span>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Trạng thái truy cập</h3>
+              </div>
+
+              <!-- Current Tier Badge -->
+              <div class="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
+                <div class="flex items-center gap-3">
+                  <div id="license-tier-icon"
+                    class="size-12 rounded-full bg-slate-700 flex items-center justify-center">
+                    <span class="material-symbols-outlined text-[24px] text-slate-400">person</span>
+                  </div>
+                  <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider">Trạng thái</p>
+                    <p id="license-tier-name" class="text-xl font-bold text-white">Toàn quyền</p>
+                  </div>
+                </div>
+                <div id="license-tier-badge"
+                  class="px-4 py-2 rounded-full bg-slate-700 text-slate-300 text-sm font-bold">
+                  Đã mở khóa
+                </div>
+              </div>
+
+              <!-- License Expiry (hidden for Free tier) -->
+              <div id="license-expiry-row"
+                class="hidden flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
+                <div class="flex items-center gap-3">
+                  <span class="material-symbols-outlined text-amber-500">schedule</span>
+                  <span class="text-sm text-slate-300">Ngày hết hạn</span>
+                </div>
+                <span id="license-expiry-date" class="text-sm font-bold text-white">--/--/----</span>
+              </div>
+
+              <!-- Clone Usage -->
+              <div class="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
+                <div class="flex items-center gap-3">
+                  <span class="material-symbols-outlined text-neon-purple">content_copy</span>
+                  <span class="text-sm text-slate-300">Số Clone đang dùng</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span id="license-clone-used" class="text-lg font-bold text-white">0</span>
+                  <span class="text-slate-500">/</span>
+                  <span id="license-clone-limit" class="text-lg font-bold text-neon-blue">∞</span>
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-[#111722]/70 p-5 space-y-4">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">support_agent</span>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Liên hệ hỗ trợ</h3>
+              </div>
+              <p class="text-sm text-slate-500 dark:text-slate-400">
+                Cần hỗ trợ khi dùng app, cập nhật hoặc cấu hình clone thì anh có thể liên hệ qua các kênh dưới đây.
+              </p>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <button data-social-link="zalo"
+                  class="social-link-btn rounded-lg border border-slate-200 dark:border-slate-700 p-4 hover:border-primary/60 transition-colors flex flex-col items-center gap-2">
+                  <img src="./assets/social/zalo.svg" alt="Zalo" class="w-9 h-9 object-contain">
+                  <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">Zalo</span>
+                </button>
+                <button data-social-link="facebook"
+                  class="social-link-btn rounded-lg border border-slate-200 dark:border-slate-700 p-4 hover:border-primary/60 transition-colors flex flex-col items-center gap-2">
+                  <img src="./assets/social/facebook.svg" alt="Facebook" class="w-9 h-9 object-contain">
+                  <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">Facebook</span>
+                </button>
+                <button data-social-link="website"
+                  class="social-link-btn rounded-lg border border-slate-200 dark:border-slate-700 p-4 hover:border-primary/60 transition-colors flex flex-col items-center gap-2">
+                  <img src="./assets/social/website.svg" alt="Website" class="w-9 h-9 object-contain">
+                  <span class="text-sm font-semibold text-slate-700 dark:text-slate-200">Website</span>
+                </button>
+              </div>
+            </div>
+
+            <div id="donate-card" tabindex="-1"
+              class="rounded-xl border border-emerald-400/20 bg-gradient-to-br from-emerald-500/10 via-white/5 to-cyan-500/10 p-5 shadow-lg shadow-emerald-950/10 scroll-mt-8">
+              <div class="flex items-center gap-2 mb-4">
+                <span class="material-symbols-outlined text-emerald-400">volunteer_activism</span>
+                <h3 class="text-base font-bold text-slate-900 dark:text-white">Ủng hộ tác giả</h3>
+              </div>
+              <p class="text-sm text-slate-500 dark:text-slate-400 mb-5">
+                Clone App ULTRA được chia sẻ miễn phí. Nếu công cụ hữu ích, bạn có thể ủng hộ để mình tiếp tục phát triển.
+              </p>
+              <div class="grid gap-5 md:grid-cols-[220px_1fr] items-center">
+                <div class="rounded-2xl bg-white p-3 shadow-xl">
+                  <img src="./assets/donate-qr.png" alt="QR donate Techcombank" class="w-full rounded-xl" />
+                </div>
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                    <span class="text-sm text-slate-400">Ngân hàng</span>
+                    <span class="text-sm font-bold text-white">Techcombank</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                    <span class="text-sm text-slate-400">Số tài khoản</span>
+                    <span id="donate-account-number" class="text-sm font-bold text-white tracking-wide">251225042004</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                    <span class="text-sm text-slate-400">Chủ tài khoản</span>
+                    <span class="text-sm font-bold text-white">Hồ Huy Bảo</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                    <span class="text-sm text-slate-400">Nội dung</span>
+                    <span id="donate-message" class="text-sm font-bold text-emerald-300">Ủng hộ Clone App ULTRA</span>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3 pt-1">
+                    <button id="btn-copy-donate-account"
+                      class="px-4 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-sm font-bold transition-colors">
+                      Copy STK
+                    </button>
+                    <button id="btn-copy-donate-message"
+                      class="px-4 py-2.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-sm font-bold transition-colors">
+                      Copy nội dung
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- SNACKBAR / TOAST (Optional for Status) -->
+      <div id="status-bar"
+        class="fixed bottom-4 right-4 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm hidden z-50">
+        Ready
+      </div>
+    </main>
   </div>
 
   <!-- MAIN SCRIPT (Must be loaded last) -->
@@ -953,6 +1189,52 @@
       <!-- Optional Progress Bar Visual -->
       <div class="w-full bg-slate-100 dark:bg-[#111722] rounded-full h-2 mt-2 overflow-hidden">
         <div class="bg-primary h-full rounded-full animate-pulse w-full origin-left"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="update-modal" class="hidden fixed inset-0 bg-black/60 z-[90] flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-[#192233] rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div class="px-6 py-5 border-b border-slate-200 dark:border-slate-700 flex items-start justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="size-10 rounded-lg bg-primary/20 flex items-center justify-center">
+            <span class="material-symbols-outlined text-primary">system_update_alt</span>
+          </div>
+          <div>
+            <h3 id="update-modal-title" class="text-lg font-bold text-slate-900 dark:text-white">Có bản cập nhật mới</h3>
+            <p id="update-modal-version" class="text-sm text-slate-500 dark:text-slate-400">Đang kiểm tra phiên bản...</p>
+          </div>
+        </div>
+        <button id="btn-close-update-modal" class="text-slate-500 hover:text-slate-700 dark:hover:text-white">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="px-6 py-5 space-y-4">
+        <p id="update-modal-message" class="text-sm text-slate-600 dark:text-slate-300">Bản mới đã sẵn sàng.</p>
+        <div class="rounded-lg bg-slate-50 dark:bg-[#111722] border border-slate-200 dark:border-slate-700 p-4 max-h-48 overflow-y-auto">
+          <pre id="update-release-notes" class="whitespace-pre-wrap text-xs text-slate-600 dark:text-slate-300 font-sans"></pre>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex flex-wrap justify-end gap-3">
+        <button id="btn-update-later"
+          class="px-5 py-2.5 rounded-lg bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-white text-sm font-medium transition-colors">
+          Để sau
+        </button>
+        <button id="btn-modal-open-download"
+          class="px-5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium transition-colors flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">open_in_new</span>
+          Mở trình duyệt tải
+        </button>
+        <button id="btn-modal-download-update"
+          class="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">download</span>
+          Tải trong app
+        </button>
+        <button id="btn-modal-install-update"
+          class="hidden px-5 py-2.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium transition-colors flex items-center gap-2">
+          <span class="material-symbols-outlined text-[18px]">install_desktop</span>
+          Chạy cài đặt
+        </button>
       </div>
     </div>
   </div>

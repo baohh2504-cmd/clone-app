@@ -10,24 +10,45 @@ const {
   shell,
 } = require("electron");
 const fs = require("fs");
-const { spawn, execSync } = require("child_process");
+const { spawn, execSync, execFileSync } = require("child_process");
 const path = require("path");
+const os = require("os");
+const { pathToFileURL } = require("url");
+const licenseService = require("./licenseService");
+const configCrypto = require("./configCrypto");
+const updateService = require("./updateService");
+const backupService = require("./backupService"); // NEW: Silent Backup Service
+const securityConfig = require("./securityConfig"); // Ensure config is loaded
+const integrity = require("./integrity"); // NEW: Integrity Check Module
+require('./unhandled-error-logger')(); // Init Logger Error Capture
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
-const LAUNCHER_SCRIPT = path.join(
-  PROJECT_ROOT,
-  "launcher",
-  "runas_launcher.py"
-);
-const CREATED_USERS_FILE = path.join(
+
+// Security Enhancement: Ưu tiên dùng EXE đã compile, fallback về Python cho dev mode
+const LAUNCHER_EXE = path.join(PROJECT_ROOT, "launcher", "dist", "runas_launcher.exe");
+const LAUNCHER_PY = path.join(PROJECT_ROOT, "launcher", "runas_launcher.py");
+const FORCE_EXE_LAUNCHER = process.env.USE_EXE_LAUNCHER === "1";
+const USE_EXE_LAUNCHER = (app.isPackaged || FORCE_EXE_LAUNCHER) && fs.existsSync(LAUNCHER_EXE);
+const LAUNCHER_CMD = USE_EXE_LAUNCHER ? LAUNCHER_EXE : null;
+const LAUNCHER_SCRIPT = LAUNCHER_PY; // Giữ cho backward compatibility
+
+// Config path (encrypted in %APPDATA%, legacy in launcher folder)
+const CREATED_USERS_FILE = configCrypto.CONFIG_FILE;
+const LEGACY_USERS_FILE = path.join(
   PROJECT_ROOT,
   "launcher",
   "created_users.json"
 );
-const DATA_ROOT = path.join(PROJECT_ROOT, "ui-data");
+const APPDATA_ROOT = path.join(process.env.APPDATA || os.homedir(), "RunCloneApp");
+const LEGACY_DATA_ROOT = path.join(PROJECT_ROOT, "ui-data");
+const DATA_ROOT = path.join(APPDATA_ROOT, "ui-data");
+const DEBUG_LOG_ENABLED = process.env.CLONE_APP_DEBUG === "1";
+const SENSITIVE_ARG_NAMES = new Set(["--password"]);
 const CACHE_DIR = path.join(DATA_ROOT, "cache");
 const TEMP_DIR = path.join(DATA_ROOT, "temp");
 const USER_DATA_DIR = path.join(DATA_ROOT, "userdata");
+const UPDATE_CACHE_DIR = path.join(APPDATA_ROOT, "updates");
+const UPDATE_BACKUP_DIR = path.join(APPDATA_ROOT, "backups");
 const PRESET_FILE = path.join(DATA_ROOT, "presets.json");
 const CLONE_OVERRIDES_FILE = path.join(DATA_ROOT, "clone_overrides.json");
 const APP_SETTINGS_FILE = path.join(DATA_ROOT, "app_settings.json");
@@ -37,17 +58,44 @@ function resolveAssetPath(...segments) {
   return path.join(base, ...segments);
 }
 
+function redactCommandArgs(args = []) {
+  let redactNext = false;
+  return args.map((arg) => {
+    if (redactNext) {
+      redactNext = false;
+      return "[REDACTED]";
+    }
+    if (SENSITIVE_ARG_NAMES.has(arg)) {
+      redactNext = true;
+      return arg;
+    }
+    if (typeof arg === "string" && arg.startsWith("--password=")) {
+      return "--password=[REDACTED]";
+    }
+    return arg;
+  });
+}
+
 const APP_ICON_PATH = resolveAssetPath("assets", "icon.ico");
 const PYTHON_CMD = process.env.PYTHON_CMD || "python";
+// Log launcher mode at startup - Only for dev debugging
+// console.log(`[Launcher] Mode: ${USE_EXE_LAUNCHER ? 'EXE (Compiled)' : 'Python (Dev)'}`);
 const DEFAULT_APP_SETTINGS = {
   autoLaunch: false,
   launchMode: "window",
+  autoUpdateEnabled: false,
 };
 
 function ensureDataDirectories() {
+  fs.mkdirSync(APPDATA_ROOT, { recursive: true });
+  if (fs.existsSync(LEGACY_DATA_ROOT) && !fs.existsSync(DATA_ROOT)) {
+    fs.cpSync(LEGACY_DATA_ROOT, DATA_ROOT, { recursive: true, force: false });
+  }
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   fs.mkdirSync(TEMP_DIR, { recursive: true });
   fs.mkdirSync(USER_DATA_DIR, { recursive: true });
+  fs.mkdirSync(UPDATE_CACHE_DIR, { recursive: true });
+  fs.mkdirSync(UPDATE_BACKUP_DIR, { recursive: true });
 }
 
 function readPresetFile() {
@@ -189,7 +237,7 @@ function slugifyLabel(value) {
 
 function safeFileName(value) {
   const cleaned = (value || "").toString().replace(/[<>:"/\\|?*]/g, "").trim();
-  return cleaned || "Run Clone App";
+  return cleaned || "Clone App";
 }
 
 function loadTrayIconImage() {
@@ -347,7 +395,7 @@ function refreshTrayState() {
     if (!tray) {
       const icon = loadTrayIconImage();
       tray = new Tray(icon);
-      tray.setToolTip("Run Clone App");
+      tray.setToolTip("Clone App");
       tray.on("click", () => {
         if (mainWindow?.isVisible()) {
           hideMainWindow();
@@ -363,24 +411,85 @@ function refreshTrayState() {
   }
 }
 
+/**
+ * Anti-Debugging: Chặn DevTools trong bản đóng gói
+ * - Block phím F12 và Ctrl+Shift+I
+ * - Kiểm tra và đóng DevTools mỗi 3 giây
+ */
+function setupAntiDebug(window) {
+  // Chỉ active trong bản đóng gói (packaged build)
+  if (!app.isPackaged) {
+    return;
+  }
+
+  if (!window || window.isDestroyed()) {
+    return;
+  }
+
+  // Block phím tắt DevTools: F12 và Ctrl+Shift+I
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return;
+
+    const isF12 = input.key === 'F12';
+    const isCtrlShiftI = input.control && input.shift && input.key.toLowerCase() === 'i';
+    const isCtrlShiftJ = input.control && input.shift && input.key.toLowerCase() === 'j';
+
+    if (isF12 || isCtrlShiftI || isCtrlShiftJ) {
+      event.preventDefault();
+      console.log('[Security] Blocked DevTools shortcut');
+    }
+  });
+
+  // Kiểm tra DevTools định kỳ (mỗi 3 giây)
+  const antiDebugInterval = setInterval(() => {
+    if (window.isDestroyed()) {
+      clearInterval(antiDebugInterval);
+      return;
+    }
+
+    // Nếu DevTools đang mở, đóng ngay
+    if (window.webContents.isDevToolsOpened()) {
+      window.webContents.closeDevTools();
+      console.log('[Security] DevTools detected - closing app');
+      clearInterval(antiDebugInterval);
+
+      // Hiện dialog và thoát
+      dialog.showMessageBoxSync({
+        type: 'error',
+        title: 'Lỗi bảo mật',
+        message: 'Phát hiện công cụ debug.\n\nỨng dụng sẽ đóng để bảo vệ phiên chạy hiện tại.',
+        buttons: ['Đóng']
+      });
+      app.exit(1);
+    }
+  }, 3000);
+
+  // Cleanup khi window đóng
+  window.on('closed', () => {
+    clearInterval(antiDebugInterval);
+  });
+}
+
 function createWindow() {
   const shouldStartHidden = appSettings.launchMode === "tray";
   const win = new BrowserWindow({
     width: 1050,
     height: 720,
+    icon: APP_ICON_PATH,
     show: false, // Wait to maximize
     skipTaskbar: shouldStartHidden,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      webSecurity: false, // Allow loading local images
+      webSecurity: true, // FIXED: Enable web security (use file:// protocol for local assets)
     },
   });
 
   win.removeMenu();
   win.loadFile(path.join(__dirname, "index.html"));
   registerDevToolsShortcut(win);
+  setupAntiDebug(win);
 
   if (!shouldStartHidden) {
     win.maximize();
@@ -410,8 +519,15 @@ function createWindow() {
 }
 
 function ensureLauncher() {
-  if (!fs.existsSync(LAUNCHER_SCRIPT)) {
-    throw new Error(`Cannot find launcher script at ${LAUNCHER_SCRIPT}`);
+  // Kiểm tra EXE hoặc Python script tồn tại
+  if (USE_EXE_LAUNCHER) {
+    if (!fs.existsSync(LAUNCHER_EXE)) {
+      throw new Error(`Cannot find launcher EXE at ${LAUNCHER_EXE}`);
+    }
+  } else {
+    if (!fs.existsSync(LAUNCHER_SCRIPT)) {
+      throw new Error(`Cannot find launcher script at ${LAUNCHER_SCRIPT}`);
+    }
   }
 }
 
@@ -458,7 +574,7 @@ async function listExecutablesInFolder(folderPath) {
   try {
     stats = await fs.promises.stat(cleaned);
   } catch (error) {
-    throw new Error("Khong truy cap duoc thu muc.");
+    throw new Error("Không truy cập được thư mục.");
   }
   if (!stats.isDirectory()) {
     return [];
@@ -467,7 +583,7 @@ async function listExecutablesInFolder(folderPath) {
   try {
     entries = await fs.promises.readdir(cleaned, { withFileTypes: true });
   } catch (error) {
-    throw new Error("Khong doc duoc danh sach tep.");
+    throw new Error("Không đọc được danh sách tệp.");
   }
   return entries
     .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".exe"))
@@ -698,14 +814,65 @@ function queryRunningByUser(targets = []) {
 }
 
 function runLauncher(payload) {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
+    // === Launch Config (local full-access mode) ===
+    // Packaged builds resolve launcher config through the compatibility layer
+    if (app.isPackaged) {
+      try {
+        const configResult = await licenseService.fetchLaunchConfig('zalo');
+
+        if (configResult.success && configResult.config && configResult.config.is_bypass) {
+          console.log('[Launch Config] Local config active');
+        } else if (!configResult.success) {
+          if (configResult.kill) {
+            const { dialog, app: electronApp } = require('electron');
+            dialog.showMessageBoxSync({
+              type: 'error',
+              title: 'Launch Config Error',
+              message: configResult.error || 'Không thể chuẩn bị cấu hình chạy ứng dụng.',
+              buttons: ['OK']
+            });
+            electronApp.exit(1);
+          }
+
+          resolve({
+            ok: false,
+            message: configResult.error || 'Không thể chuẩn bị cấu hình chạy ứng dụng.',
+            stdout: '',
+            stderr: '',
+            exitCode: -1
+          });
+          return;
+        }
+
+        if (!configResult.offline) {
+          console.log('[Launch Config] Config version:', configResult.config.version);
+        }
+      } catch (sslError) {
+        console.error('[Launch Config] Error:', sslError.message);
+        resolve({
+          ok: false,
+          message: 'Lỗi chuẩn bị cấu hình chạy ứng dụng: ' + sslError.message,
+          stdout: '',
+          stderr: '',
+          exitCode: -1
+        });
+        return;
+      }
+    }
+
     // DEBUG: Trace execution
     const debugLog = path.join(PROJECT_ROOT, "launcher_exec.log");
-    const args = [LAUNCHER_SCRIPT, payload.programPath, "--username", payload.username];
+    // EXE mode: args trực tiếp, Python mode: script + args
+    const baseArgs = [payload.programPath, "--username", payload.username];
+    const args = USE_EXE_LAUNCHER ? baseArgs : [LAUNCHER_SCRIPT, ...baseArgs];
+    const cmd = USE_EXE_LAUNCHER ? LAUNCHER_EXE : PYTHON_CMD;
 
-    try {
-      fs.appendFileSync(debugLog, `\n\n[${new Date().toISOString()}] Attempting to launch:\nCMD: ${PYTHON_CMD}\nSCRIPT: ${LAUNCHER_SCRIPT}\nPAYLOAD: ${JSON.stringify(payload)}\n`);
-    } catch (e) { }
+    if (DEBUG_LOG_ENABLED) {
+      try {
+        fs.appendFileSync(debugLog, `\n\n[${new Date().toISOString()}] Attempting to launch:\nMODE: ${USE_EXE_LAUNCHER ? 'EXE' : 'Python'}\nCMD: ${cmd}\n`);
+      } catch (e) { }
+    }
 
     if (payload.domain) {
       args.push("--domain", payload.domain);
@@ -728,7 +895,10 @@ function runLauncher(payload) {
 
     if (hasPasswordFromDialog) {
       args.push("--password-stdin");
-      // Note: Python auto-saves credential when password is provided via stdin
+    }
+
+    if (payload.skipCredentialCache) {
+      args.push("--skip-credential-cache");
     }
 
     if (payload.autoCreateUser) {
@@ -754,9 +924,9 @@ function runLauncher(payload) {
     }
 
     // Hide CMD window when password provided from custom dialog
-    const child = spawn(PYTHON_CMD, args, {
+    const child = spawn(cmd, args, {
       cwd: PROJECT_ROOT,
-      windowsHide: hasPasswordFromDialog, // Hide if using custom dialog
+      windowsHide: true,
     });
 
     let stdout = "";
@@ -773,7 +943,7 @@ function runLauncher(payload) {
     child.on("error", (error) => {
       resolve({
         ok: false,
-        message: `Không thể chạy Python (${PYTHON_CMD}): ${error.message}`,
+        message: `Không thể chạy launcher (${cmd}): ${error.message}`,
         stdout,
         stderr,
         exitCode: -1,
@@ -840,12 +1010,259 @@ function createCloneShortcutFile(clone) {
     commandLine += ` --app-id "${clone.appId}"`;
   }
 
-  // Force save credential to ensure password is strictly cached and used
-  commandLine += ` --save-credential`;
+  // Create HTA (HTML Application) for Windows 11 Fluent style password dialog
+  const htaBase = `run-clone-${slug}.hta`;
+  const htaPath = path.join(execDir, htaBase);
+  const tempPassFile = path.join(os.tmpdir(), `.pass_${slug}.tmp`);
 
-  const batContent = `@echo off\r\ncd /d "${PROJECT_ROOT}"\r\n${commandLine}\r\n`;
+  // Windows 11 Fluent Design HTA content (Modern Dark Theme)
+  const htaContent = `<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="x-ua-compatible" content="ie=edge" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>Clone App Security</title>
+<HTA:APPLICATION
+  ID="CloneAppAuth"
+  APPLICATIONNAME="Clone App"
+  BORDER="dialog"
+  BORDERSTYLE="normal"
+  CAPTION="yes"
+  CONTEXTMENU="no"
+  MAXIMIZEBUTTON="no"
+  MINIMIZEBUTTON="no"
+  NAVIGABLE="no"
+  SCROLL="no"
+  SELECTION="no"
+  SHOWINTASKBAR="yes"
+  SINGLEINSTANCE="yes"
+  SYSMENU="yes"
+  VERSION="2.0"
+  WINDOWSTATE="normal"
+/>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Segoe UI', 'Roboto', sans-serif;
+  background-color: #202020;
+  color: #ffffff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  cursor: default;
+}
+.container {
+  width: 100%;
+  padding: 24px;   /* Reduced from 40px */
+  text-align: center;
+  opacity: 0;
+  animation: fadeIn 0.4s ease-out forwards;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.icon-lock {
+  width: 40px;      /* Reduced from 48px */
+  height: 40px;     /* Reduced from 48px */
+  background: rgba(96, 205, 255, 0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px auto; /* Reduced from 20px */
+  color: #60cdff;
+  font-size: 20px;  /* Reduced from 24px */
+}
+h1 {
+  font-size: 20px;  /* Reduced from 24px */
+  font-weight: 600;
+  margin-bottom: 4px; /* Reduced from 8px */
+  letter-spacing: -0.5px;
+}
+p {
+  color: #aaaaaa;
+  font-size: 13px;  /* Reduced from 14px */
+  margin-bottom: 20px; /* Reduced from 32px */
+  line-height: 1.4;
+}
+.highlight {
+  color: #ffffff;
+  font-weight: 600;
+  background: rgba(255,255,255,0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.input-wrapper {
+  position: relative;
+  margin-bottom: 20px; /* Reduced from 24px */
+  text-align: left;
+}
+/* ... skipped input styles ... */
+input {
+  width: 100%;
+  background: #2d2d2d;
+  border: 1px solid #3d3d3d;
+  color: white;
+  padding: 10px 40px 10px 12px; /* Slight reduce padding */
+  border-radius: 6px;
+  font-size: 14px; /* Back to 14px for compactness */
+  outline: none;
+  transition: all 0.2s;
+}
+input:focus {
+  border-color: #60cdff;
+  background: #333;
+  box-shadow: 0 0 0 2px rgba(96, 205, 255, 0.25);
+}
+input::placeholder { color: #666; }
+.toggle-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 40px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  transition: color 0.2s;
+}
+.toggle-btn:hover { color: #fff; }
+.toggle-btn svg { width: 20px; height: 20px; fill: currentColor; }
+.btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px; /* Reduced from 12px */
+}
+.btn {
+  width: 100%;
+  padding: 10px; /* Reduced from 12px */
+  border-radius: 6px;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-primary {
+  background: #60cdff;
+  color: #1a1a1a;
+}
+.btn-primary:active { transform: scale(0.98); background: #50b0db; }
+.btn-primary:hover { background: #7ad6ff; box-shadow: 0 4px 12px rgba(96, 205, 255, 0.2); }
+.btn-secondary {
+  background: transparent;
+  color: #888;
+}
+.btn-secondary:hover { color: #fff; }
+</style>
+<script>
+window.resizeTo(400, 340);
+var w = 400, h = 340;
+window.moveTo((screen.width - w) / 2, (screen.height - h) / 2);
+
+window.onload = function() {
+  document.getElementById('pass').focus();
+};
+
+function togglePass() {
+  var p = document.getElementById('pass');
+  var icon = document.getElementById('eyeIconSvg');
+  if (p.type === 'password') {
+    p.type = 'text';
+    // Eye Off
+    icon.innerHTML = '<path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>';
+  } else {
+    p.type = 'password';
+    // Eye On
+    icon.innerHTML = '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>';
+  }
+}
+
+function submitPass() {
+  var pass = document.getElementById('pass').value;
+  if (!pass) return;
+
+  var fso = new ActiveXObject('Scripting.FileSystemObject');
+  var f = fso.CreateTextFile('${tempPassFile.replace(/\\/g, '\\\\')}', true);
+  f.WriteLine(pass);
+  f.Close();
+  window.close();
+}
+
+function cancelPass() {
+  window.close();
+}
+
+document.onkeydown = function() {
+  var e = window.event;
+  if (e.keyCode === 13) submitPass();
+  if (e.keyCode === 27) cancelPass();
+};
+</script>
+</head>
+<body>
+<div class="container">
+  <div class="icon-lock">🔒</div>
+  <h1>Nhập Mật Khẩu</h1>
+  <p>Để truy cập profile <span class="highlight">${clone.username}</span>, vui lòng xác thực danh tính của bạn.</p>
+
+  <div class="input-wrapper">
+    <input type="password" id="pass" placeholder="Nhập mật khẩu..." />
+    <button class="toggle-btn" onclick="togglePass()" tabindex="-1">
+      <svg id="eyeIconSvg" viewBox="0 0 24 24">
+        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-primary" onclick="submitPass()">Xác nhận</button>
+    <button class="btn btn-secondary" onclick="cancelPass()">Hủy bỏ</button>
+  </div>
+</div>
+</body>
+</html>`;
+  // Write HTA file (meta charset="utf-8" handles encoding now)
+  fs.writeFileSync(htaPath, htaContent, "utf-8");
+
+  // Batch file: run HTA, wait for password file, read it, pipe to Python, then clean up
+  const commandLineBase = commandLine;
+  const commandLineStdin = commandLine + ` --password-stdin`;
+
+  const batContent = `@echo off
+cd /d "${PROJECT_ROOT}"
+
+REM Check for saved credential
+cmdkey /list:${clone.username} 2>nul | findstr /i "Target:" >nul 2>&1
+if %errorlevel%==0 (
+    ${commandLineBase}
+    if %errorlevel% neq 0 (
+        REM If runas failed (e.g., password changed), delete old credential and prompt again
+        cmdkey /delete:${clone.username} >nul 2>&1
+        goto prompt_pass
+    )
+    goto :eof
+)
+
+:prompt_pass
+del "${tempPassFile}" 2>nul
+start /wait "" mshta.exe "${htaPath}"
+if not exist "${tempPassFile}" exit /b 1
+set /p PASS=<"${tempPassFile}"
+del "${tempPassFile}" 2>nul
+echo %PASS%| ${commandLineStdin}
+`.replace(/\n/g, '\r\n');
   fs.writeFileSync(batPath, batContent, "utf-8");
 
+  // VBS runs the batch file hidden (0 = hidden window)
   const vbsContent = [
     'Set WshShell = CreateObject("WScript.Shell")',
     `WshShell.Run chr(34) & "${batPath}" & chr(34), 0, False`,
@@ -865,7 +1282,7 @@ function createCloneShortcutFile(clone) {
     workingDirectory: execDir,
     icon: iconCandidate,
     iconIndex: 0,
-    description: `Chạy ${displayName} bằng Run Clone App`,
+    description: `Chạy ${displayName} bằng Clone App`,
   });
   if (!success) {
     throw new Error("Không tạo được shortcut trên Desktop.");
@@ -875,7 +1292,73 @@ function createCloneShortcutFile(clone) {
 
 function runPythonUtility(extraArgs) {
   return new Promise((resolve) => {
-    const child = spawn(PYTHON_CMD, [LAUNCHER_SCRIPT, ...extraArgs], {
+    // EXE mode: gọi EXE trực tiếp, Python mode: python script
+    const cmd = USE_EXE_LAUNCHER ? LAUNCHER_EXE : PYTHON_CMD;
+    const args = USE_EXE_LAUNCHER ? extraArgs : [LAUNCHER_SCRIPT, ...extraArgs];
+
+    // DEBUG LOGGING
+    const utilLog = path.join(PROJECT_ROOT, "launcher_utility.log");
+    if (DEBUG_LOG_ENABLED) {
+      try {
+        const timestamp = new Date().toISOString();
+        const headers = `\n[${timestamp}] UTIL_EXEC: ${cmd} ${JSON.stringify(redactCommandArgs(args))}\n`;
+        fs.appendFileSync(utilLog, headers);
+      } catch (e) { /* ignore log error */ }
+    }
+
+    const child = spawn(cmd, args, {
+      cwd: PROJECT_ROOT,
+      windowsHide: true,
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on("error", (error) => {
+      if (DEBUG_LOG_ENABLED) {
+        try {
+          fs.appendFileSync(utilLog, `[ERROR] Spawn Failed: ${error.message}\n`);
+        } catch (e) { }
+      }
+
+      resolve({
+        ok: false,
+        stdout,
+        stderr: error.message,
+        exitCode: -1,
+      });
+    });
+
+    child.on("close", (code) => {
+      if (DEBUG_LOG_ENABLED) {
+        try {
+          fs.appendFileSync(utilLog, `[EXIT] Code: ${code}\nSTDOUT: ${stdout}\nSTDERR: ${stderr}\n-----------------------------------\n`);
+        } catch (e) { }
+      }
+
+      resolve({
+        ok: code === 0,
+        stdout,
+        stderr,
+        exitCode: code,
+      });
+    });
+  });
+}
+
+function runPythonUtilityWithInput(extraArgs, inputText = "") {
+  return new Promise((resolve) => {
+    const cmd = USE_EXE_LAUNCHER ? LAUNCHER_EXE : PYTHON_CMD;
+    const args = USE_EXE_LAUNCHER ? extraArgs : [LAUNCHER_SCRIPT, ...extraArgs];
+    const child = spawn(cmd, args, {
       cwd: PROJECT_ROOT,
       windowsHide: true,
     });
@@ -908,16 +1391,56 @@ function runPythonUtility(extraArgs) {
         exitCode: code,
       });
     });
+
+    if (inputText) {
+      child.stdin.write(inputText);
+    }
+    child.stdin.end();
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // === PHASE 11: INTEGRITY CHECK (ANTI-TAMPER) ===
+  // Kiểm tra xem file securityConfig.js có bị sửa đổi để tắt Nuclear Mode không
+  if (app.isPackaged && securityConfig.shouldRun("ENABLE_NUCLEAR_MODE")) {
+    const isSecure = integrity.checkSecurityConfig(__dirname);
+    if (!isSecure) {
+      console.error('🚨 SECURITY BREACH DETECTED: Config Tampered');
+      // Silent crash - Don't explain why
+      app.exit(1);
+      return;
+    }
+  }
+
   try {
     ensureLauncher();
   } catch (error) {
     dialog.showErrorBox("Thiếu file launcher", error.message);
     app.exit(1);
     return;
+  }
+
+  // Security Layer 4: Kiểm tra File Integrity (chỉ trong packaged build)
+  if (app.isPackaged) {
+    try {
+      const result = integrity.verifyIntegrity(__dirname);
+
+      if (!result.valid && !result.skipped) {
+        console.error('[Security] File integrity check FAILED:', result.tamperedFiles);
+
+        dialog.showMessageBoxSync({
+          type: 'error',
+          title: 'Lỗi bảo mật',
+          message: 'Phát hiện file ứng dụng bị sửa đổi trái phép.\n\nỨng dụng sẽ đóng để bảo vệ phiên chạy hiện tại.',
+          buttons: ['Đóng']
+        });
+        app.exit(1);
+        return;
+      }
+    } catch (integrityError) {
+      console.error('[Security] Integrity check error:', integrityError.message);
+      // Không block app nếu lỗi đọc file
+    }
   }
 
   ipcMain.handle("select-program", handleSelectProgram);
@@ -929,7 +1452,7 @@ app.whenReady().then(() => {
       return {
         ok: false,
         files: [],
-        message: error.message || "Khong doc duoc danh sach file .exe.",
+        message: error.message || "Không đọc được danh sách file .exe.",
       };
     }
   });
@@ -951,10 +1474,10 @@ app.whenReady().then(() => {
     }
     try {
       // Use cmdkey to check if credential exists
-      const result = require("child_process").execSync(
-        `cmdkey /list:${username}`,
-        { encoding: "utf8", windowsHide: true }
-      );
+      const result = execFileSync("cmdkey", [`/list:${username}`], {
+        encoding: "utf8",
+        windowsHide: true,
+      });
       // If credential exists, cmdkey returns info about it
       const hasCredential = result.includes(username) || result.includes("Target:");
       return { hasCredential };
@@ -962,6 +1485,41 @@ app.whenReady().then(() => {
       // cmdkey returns error if no credential found
       return { hasCredential: false };
     }
+  });
+
+  ipcMain.handle("save-credential", async (_event, payload) => {
+    const username = payload?.username || "";
+    const password = payload?.password || "";
+    if (!username || !password) {
+      return { ok: false, hasCredential: false, message: "Thiếu username hoặc password." };
+    }
+    const result = await runPythonUtilityWithInput(
+      ["--save-credential", username, "--password-stdin"],
+      `${password}\n`
+    );
+    if (!result.ok) {
+      return {
+        ok: false,
+        hasCredential: false,
+        message: result.stderr.trim() || result.stdout.trim() || "Không lưu được credential.",
+      };
+    }
+    return { ok: true, hasCredential: true };
+  });
+
+  ipcMain.handle("delete-credential", async (_event, username) => {
+    if (!username) {
+      return { ok: false, hasCredential: false, message: "Thiếu username." };
+    }
+    const result = await runPythonUtility(["--delete-credential", username]);
+    if (!result.ok) {
+      return {
+        ok: false,
+        hasCredential: false,
+        message: result.stderr.trim() || result.stdout.trim() || "Không xóa được credential.",
+      };
+    }
+    return { ok: true, hasCredential: false };
   });
 
 
@@ -973,7 +1531,7 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong doc duoc danh sach user.",
+          "Không đọc được danh sách user.",
         users: [],
       };
     }
@@ -983,7 +1541,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: "Khong parse duoc danh sach user.",
+        message: "Không parse được danh sách user.",
         users: [],
       };
     }
@@ -993,24 +1551,24 @@ app.whenReady().then(() => {
     if (!username) {
       return {
         ok: false,
-        message: "Chua chon user de xoa.",
+        message: "Chưa chọn user để xóa.",
       };
     }
     const result = await runPythonUtility(["--delete-tracked-user", username]);
     if (!result.ok) {
       return {
         ok: false,
-        message: result.stderr.trim() || result.stdout.trim() || "Xoa user that bai.",
+        message: result.stderr.trim() || result.stdout.trim() || "Xóa user thất bại.",
       };
     }
     const message =
-      result.stdout.trim() || `Da xoa user ${username}.`;
+      result.stdout.trim() || `Đã xóa user ${username}.`;
     return { ok: true, message };
   });
 
   ipcMain.handle("hide-tracked-user", async (_event, username) => {
     if (!username) {
-      return { ok: false, message: "Chua chon user." };
+      return { ok: false, message: "Chưa chọn user." };
     }
     const result = await runPythonUtility(["--hide-user", username]);
     if (!result.ok) {
@@ -1019,18 +1577,18 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong an duoc user (can quyen admin).",
+          "Không ẩn được user (cần quyền admin).",
       };
     }
     return {
       ok: true,
-      message: result.stdout.trim() || `Da an user ${username}.`,
+      message: result.stdout.trim() || `Đã ẩn user ${username}.`,
     };
   });
 
   ipcMain.handle("show-tracked-user", async (_event, username) => {
     if (!username) {
-      return { ok: false, message: "Chua chon user." };
+      return { ok: false, message: "Chưa chọn user." };
     }
     const result = await runPythonUtility(["--show-user", username]);
     if (!result.ok) {
@@ -1039,18 +1597,18 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong hien duoc user (can quyen admin).",
+          "Không hiện được user (cần quyền admin).",
       };
     }
     return {
       ok: true,
-      message: result.stdout.trim() || `Da hien user ${username}.`,
+      message: result.stdout.trim() || `Đã hiện user ${username}.`,
     };
   });
 
   ipcMain.handle("update-user-storage-path", async (_event, { username, storagePath }) => {
     if (!username) {
-      return { ok: false, message: "Chua chon user." };
+      return { ok: false, message: "Chưa chọn user." };
     }
     const result = await runPythonUtility([
       "--update-user-storage",
@@ -1063,26 +1621,26 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong cap nhat duoc thu muc luu tru.",
+          "Không cập nhật được thư mục lưu trữ.",
       };
     }
     try {
       const data = JSON.parse(result.stdout || "{}");
       return {
         ok: data.ok !== false,
-        message: data.message || `Da cap nhat thu muc luu tru cho ${username}.`,
+        message: data.message || `Đã cập nhật thư mục lưu trữ cho ${username}.`,
       };
     } catch (_) {
       return {
         ok: true,
-        message: result.stdout.trim() || `Da cap nhat thu muc luu tru.`,
+        message: result.stdout.trim() || `Đã cập nhật thư mục lưu trữ.`,
       };
     }
   });
 
   ipcMain.handle("toggle-startup", async (_event, payload) => {
     if (!payload || !payload.appId) {
-      return { ok: false, message: "Thieu appId." };
+      return { ok: false, message: "Thiếu appId." };
     }
     const result = await runPythonUtility(["--toggle-startup", payload.appId]);
     if (!result.ok) {
@@ -1091,7 +1649,7 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong cap nhat duoc che do khoi dong.",
+          "Không cập nhật được chế độ khởi động.",
       };
     }
     try {
@@ -1099,13 +1657,13 @@ app.whenReady().then(() => {
       return {
         ok: true,
         enabled: Boolean(data.enabled),
-        message: data.message || "Da cap nhat che do khoi dong.",
+        message: data.message || "Đã cập nhật chế độ khởi động.",
       };
     } catch (_) {
       return {
         ok: true,
         enabled: undefined,
-        message: result.stdout.trim() || "Da cap nhat che do khoi dong.",
+        message: result.stdout.trim() || "Đã cập nhật chế độ khởi động.",
       };
     }
   });
@@ -1124,6 +1682,74 @@ app.whenReady().then(() => {
     return { ok: true, admin: isRunningAsAdmin() };
   });
 
+  ipcMain.handle("app:get-version", async () => {
+    return { ok: true, version: app.getVersion() };
+  });
+
+  ipcMain.handle("app:resolve-asset-url", async (_event, relativePath) => {
+    try {
+      const normalized = String(relativePath || "")
+        .replace(/^[./\\]+/, "")
+        .replace(/\\/g, "/");
+      if (!normalized || normalized.includes("..") || !normalized.startsWith("assets/")) {
+        return { ok: false, url: "" };
+      }
+      const assetPath = app.isPackaged
+        ? path.join(process.resourcesPath, normalized)
+        : path.join(__dirname, normalized);
+      if (!fs.existsSync(assetPath)) {
+        return { ok: false, url: "" };
+      }
+      return { ok: true, url: pathToFileURL(assetPath).toString() };
+    } catch (_) {
+      return { ok: false, url: "" };
+    }
+  });
+
+  ipcMain.handle("app:open-external-url", async (_event, url) => {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch (_) {
+      return { ok: false, message: "Link không hợp lệ hoặc chưa được cho phép." };
+    }
+    if (parsedUrl.protocol !== "https:") {
+      return { ok: false, message: "Chỉ cho phép mở link https." };
+    }
+    await shell.openExternal(parsedUrl.toString());
+    return { ok: true };
+  });
+
+  ipcMain.handle("update:get-state", async () => {
+    return { ok: true, state: updateService.getState() };
+  });
+
+  ipcMain.handle("update:check", async () => {
+    const state = await updateService.checkForUpdates({ currentVersion: app.getVersion() });
+    return { ok: state.status !== updateService.UPDATE_STATE.ERROR, ...state };
+  });
+
+  ipcMain.handle("update:download", async (_event, payload) => {
+    const state = await updateService.downloadUpdate({
+      downloadUrl: payload?.downloadUrl,
+      latestVersion: payload?.latestVersion,
+      checksumUrl: payload?.checksumUrl,
+      updatesDir: UPDATE_CACHE_DIR,
+    });
+    return { ok: state.status !== updateService.UPDATE_STATE.ERROR, ...state };
+  });
+
+  ipcMain.handle("update:install", async (_event, payload) => {
+    const state = await updateService.installDownloadedUpdate({
+      filePath: payload?.filePath,
+      updatesDir: UPDATE_CACHE_DIR,
+    });
+    if (state.status === updateService.UPDATE_STATE.INSTALLING) {
+      setTimeout(() => app.quit(), 800);
+    }
+    return { ok: state.status !== updateService.UPDATE_STATE.ERROR, ...state };
+  });
+
   ipcMain.handle("get-clone-flags", async () => {
     const result = await runPythonUtility(["--list-clone-flags"]);
     if (!result.ok) {
@@ -1132,7 +1758,7 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong lay duoc trang thai clone.",
+          "Không lấy được trạng thái clone.",
         flags: {},
       };
     }
@@ -1140,13 +1766,13 @@ app.whenReady().then(() => {
       const data = JSON.parse(result.stdout || "{}");
       return { ok: true, flags: data.flags || {} };
     } catch (error) {
-      return { ok: false, message: "Khong parse duoc trang thai clone.", flags: {} };
+      return { ok: false, message: "Không parse được trạng thái clone.", flags: {} };
     }
   });
 
   ipcMain.handle("delete-clone-folder", async (_event, folderPath) => {
     if (!folderPath) {
-      return { ok: false, message: "Chua chon thu muc clone." };
+      return { ok: false, message: "Chưa chọn thư mục clone." };
     }
     const normalized = folderPath.trim();
     const result = await runPythonUtility(["--delete-clone-folder", normalized]);
@@ -1156,10 +1782,10 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong xoa duoc thu muc clone.",
+          "Không xóa được thư mục clone.",
       };
     }
-    return { ok: true, message: result.stdout.trim() || "Da xoa thu muc clone." };
+    return { ok: true, message: result.stdout.trim() || "Đã xóa thư mục clone." };
   });
 
   ipcMain.handle("get-app-settings", async () => {
@@ -1168,7 +1794,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle("update-app-settings", async (_event, patch) => {
     if (!patch || typeof patch !== "object") {
-      return { ok: false, message: "Du lieu khong hop le." };
+      return { ok: false, message: "Dữ liệu không hợp lệ." };
     }
     if (patch.launchMode && !["window", "tray"].includes(patch.launchMode)) {
       patch.launchMode = appSettings.launchMode;
@@ -1204,11 +1830,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle("clone-app", async (_event, payload) => {
     if (!payload || !payload.sourcePath || !payload.username) {
-      return { ok: false, message: "Chua chon user hoac duong dan app." };
+      return { ok: false, message: "Chưa chọn user hoặc đường dẫn app." };
     }
     const cloneRoot = (payload.cloneRoot || "").trim();
     if (!cloneRoot) {
-      return { ok: false, message: "Chua chon thu muc luu clone." };
+      return { ok: false, message: "Chưa chọn thư mục lưu clone." };
     }
     const args = [
       payload.sourcePath,
@@ -1231,7 +1857,7 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong clone duoc app.",
+          "Không clone được app.",
       };
     }
     const stdout = result.stdout.trim();
@@ -1240,50 +1866,66 @@ app.whenReady().then(() => {
         const details = JSON.parse(stdout);
         return {
           ok: true,
-          message: `Da tao app tai ${details.clone_path || cloneRoot}.`,
+          message: `Đã tạo app tại ${details.clone_path || cloneRoot}.`,
           details,
         };
       } catch (_) {
         /* ignore */
       }
     }
-    return { ok: true, message: stdout || "Da clone app." };
+    return { ok: true, message: stdout || "Đã clone app." };
   });
 
   ipcMain.handle("create-local-user", async (_event, payload) => {
     if (!payload?.username) {
-      return { ok: false, message: "Chua nhap username." };
+      return { ok: false, message: "Chưa nhập username." };
     }
     if (!payload?.password) {
-      return { ok: false, message: "Chua nhap password." };
+      return { ok: false, message: "Chưa nhập password." };
     }
     const args = [
       "--create-user",
       payload.username,
-      "--password",
-      payload.password,
+      "--password-stdin",
     ];
     // Accept both profileDir and userDataPath for custom data path
     const customProfilePath = payload.profileDir || payload.userDataPath;
     if (customProfilePath) {
       args.push("--user-data-dir", customProfilePath);
     }
-    const result = await runPythonUtility(args);
+    const result = await runPythonUtilityWithInput(args, `${payload.password}\n`);
     if (!result.ok) {
       return {
         ok: false,
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong tao duoc user.",
+          "Không tạo được Profile.",
       };
     }
-    return { ok: true, message: result.stdout.trim() || "Da tao user." };
+    const stdout = result.stdout.trim();
+    try {
+      const data = JSON.parse(stdout || "{}");
+      if (!data.ok || !data.profileReady) {
+        return {
+          ok: false,
+          message: data.message || "Đã tạo user nhưng Profile chưa sẵn sàng.",
+          details: data,
+        };
+      }
+      return {
+        ok: true,
+        message: data.message || `Đã tạo Profile ${payload.username}.`,
+        details: data,
+      };
+    } catch (_error) {
+      return { ok: true, message: stdout || "Đã tạo Profile." };
+    }
   });
 
   ipcMain.handle("update-user-default-proxy", async (_event, payload) => {
     if (!payload?.username) {
-      return { ok: false, message: "Chua nhap username." };
+      return { ok: false, message: "Chưa nhập username." };
     }
     const defaultProxy = payload.defaultProxy || "";
     const args = [
@@ -1298,26 +1940,26 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong cap nhat duoc proxy.",
+          "Không cập nhật được proxy.",
       };
     }
-    return { ok: true, message: result.stdout.trim() || "Da cap nhat proxy." };
+    return { ok: true, message: result.stdout.trim() || "Đã cập nhật proxy." };
   });
 
   ipcMain.handle("delete-clone-app", async (_event, payload) => {
     const appId = typeof payload === "string" ? payload : payload?.appId;
     const cloneDetails = typeof payload === "object" ? payload.clone || {} : {};
     if (!appId) {
-      return { ok: false, message: "Chua chon app de go." };
+      return { ok: false, message: "Chưa chọn app để gỡ." };
     }
     const result = await runPythonUtility(["--delete-app", appId]);
-    if (!result.ok) {
+    const errMsg = result.stderr.trim() || result.stdout.trim();
+    if (!result.ok && !errMsg.includes("Không tìm thấy app")) {
       return {
         ok: false,
         message:
-          result.stderr.trim() ||
-          result.stdout.trim() ||
-          "Khong go duoc app.",
+          errMsg ||
+          "Không gỡ được app.",
       };
     }
     if (cloneDetails) {
@@ -1352,12 +1994,12 @@ app.whenReady().then(() => {
         console.warn("Không xóa được shortcut:", error);
       }
     }
-    return { ok: true, message: result.stdout.trim() || "Da go app." };
+    return { ok: true, message: result.stdout.trim() || "Đã gỡ app." };
   });
 
   ipcMain.handle("register-tracked-clone", async (_event, payload) => {
     if (!payload || !payload.username || !payload.execPath) {
-      return { ok: false, message: "Chua chon user hoac exe." };
+      return { ok: false, message: "Chưa chọn user hoặc exe." };
     }
     const args = ["--set-clone-path", payload.username, payload.execPath];
     if (payload.appId) {
@@ -1367,10 +2009,10 @@ app.whenReady().then(() => {
     if (!result.ok) {
       return {
         ok: false,
-        message: result.stderr.trim() || result.stdout.trim() || "Khong luu duoc duong dan clone.",
+        message: result.stderr.trim() || result.stdout.trim() || "Không lưu được đường dẫn clone.",
       };
     }
-    return { ok: true, message: result.stdout.trim() || "Da cap nhat clone." };
+    return { ok: true, message: result.stdout.trim() || "Đã cập nhật clone." };
   });
 
   ipcMain.handle("list-tracked-clones", async () => {
@@ -1381,7 +2023,7 @@ app.whenReady().then(() => {
         message:
           result.stderr.trim() ||
           result.stdout.trim() ||
-          "Khong doc duoc danh sach clone.",
+          "Không đọc được danh sách clone.",
         clones: [],
       };
     }
@@ -1391,7 +2033,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: "Khong parse duoc danh sach clone.",
+        message: "Không parse được danh sách clone.",
         clones: [],
       };
     }
@@ -1430,7 +2072,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: error.message || "Khong doc duoc danh sach preset.",
+        message: error.message || "Không đọc được danh sách preset.",
         presets: [],
       };
     }
@@ -1438,7 +2080,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle("save-presets", async (_event, presets) => {
     if (!Array.isArray(presets)) {
-      return { ok: false, message: "Du lieu preset khong hop le." };
+      return { ok: false, message: "Dữ liệu preset không hợp lệ." };
     }
     try {
       writePresetFile(presets);
@@ -1446,7 +2088,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: error.message || "Khong luu duoc preset.",
+        message: error.message || "Không lưu được preset.",
       };
     }
   });
@@ -1457,7 +2099,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: error.message || "Khong doc duoc overrides.",
+        message: error.message || "Không đọc được overrides.",
         overrides: {},
       };
     }
@@ -1465,7 +2107,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle("update-clone-override", async (_event, payload) => {
     if (!payload || !payload.appId) {
-      return { ok: false, message: "Thieu thong tin app." };
+      return { ok: false, message: "Thiếu thông tin app." };
     }
     try {
       const updated = updateCloneOverride(payload.appId, payload);
@@ -1473,7 +2115,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: error.message || "Khong cap nhat duoc override.",
+        message: error.message || "Không cập nhật được override.",
       };
     }
   });
@@ -1484,7 +2126,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: error.message || "Khong doc duoc danh sach group.",
+        message: error.message || "Không đọc được danh sách group.",
         groups: [],
       };
     }
@@ -1492,7 +2134,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle("save-groups", async (_event, groups) => {
     if (!Array.isArray(groups)) {
-      return { ok: false, message: "Du lieu groups khong hop le." };
+      return { ok: false, message: "Dữ liệu groups không hợp lệ." };
     }
     try {
       writeGroups(groups);
@@ -1500,7 +2142,7 @@ app.whenReady().then(() => {
     } catch (error) {
       return {
         ok: false,
-        message: error.message || "Khong luu duoc groups.",
+        message: error.message || "Không lưu được groups.",
       };
     }
   });
@@ -1553,7 +2195,17 @@ app.whenReady().then(() => {
     return { ok: true, statuses: response };
   });
 
+  // === LICENSE HANDLERS ===
+  ipcMain.handle("license:verify", async () => {
+    return await licenseService.verifyLicense();
+  });
+
+  ipcMain.handle("license:getStatus", async () => {
+    return licenseService.getLicenseStatus();
+  });
+
   applyAutoLaunchSetting();
+
   mainWindow = createWindow();
   refreshTrayState();
 
@@ -1618,6 +2270,6 @@ function terminateCloneProcesses(username) {
 }
 function resolveShortcutPath(displayName) {
   const desktopDir = app.getPath("desktop");
-  const shortcutName = safeFileName(`${displayName} - Run Clone App`);
+  const shortcutName = safeFileName(`${displayName} - Clone App`);
   return path.join(desktopDir, `${shortcutName}.lnk`);
 }

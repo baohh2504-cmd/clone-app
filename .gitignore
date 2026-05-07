@@ -28,8 +28,17 @@ Desktop.ini
 
 # Project Specific
 .brain/session.json
+.brain/
+Clone App/.brain/
 *.log
 launcher_crash.log
 launcher_exec_debug.txt
 alive_probe.txt
 proxy_debug.log
+.gitnexus
+Clone App/source/ui-data/userdata/
+Clone App/source/ui-data/cache/
+Clone App/source/ui-data/temp/
+Clone App/source/ui/ui-data/
+Clone App/source/launcher/build/
+Clone App/source/launcher/__pycache__/

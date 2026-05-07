@@ -6,6 +6,7 @@ const els = {
   // Nav
   navDashboard: document.getElementById('nav-dashboard'),
   navSettings: document.getElementById('nav-settings'),
+  navUpdate: document.getElementById('nav-update'),
   navAccount: document.getElementById('nav-account'),
 
   // Views
@@ -13,6 +14,8 @@ const els = {
   viewAddSingle: document.getElementById('view-add-single'),
   viewBatchAdd: document.getElementById('view-batch-add'),
   viewSettings: document.getElementById('view-settings'),
+  viewUpdate: document.getElementById('view-update'),
+  viewAccount: document.getElementById('view-account'),
 
   // Dashboard Elements
   cloneGrid: document.getElementById('clone-grid'),
@@ -50,6 +53,7 @@ const els = {
   btnBatchBrowseFile: document.getElementById('btn-batch-browse-file'),
   batchExeName: document.getElementById('batch-exe-name'),
   batchCloneDir: document.getElementById('batch-clone-dir'),
+  batchPassword: document.getElementById('batch-password'),
   btnBatchBrowseFolder: document.getElementById('btn-batch-browse-folder'),
   batchPrefix: document.getElementById('batch-prefix'),
   batchCount: document.getElementById('batch-count'),
@@ -100,6 +104,19 @@ const els = {
   passwordModalCancel: document.getElementById('password-modal-cancel'),
   passwordModalConfirm: document.getElementById('password-modal-confirm'),
 
+  // Account / License Elements
+  btnBackFromAccount: document.getElementById('btn-back-from-account'),
+  licenseTierIcon: document.getElementById('license-tier-icon'),
+  licenseTierName: document.getElementById('license-tier-name'),
+  licenseTierBadge: document.getElementById('license-tier-badge'),
+  licenseExpiryRow: document.getElementById('license-expiry-row'),
+  licenseExpiryDate: document.getElementById('license-expiry-date'),
+  licenseCloneUsed: document.getElementById('license-clone-used'),
+  licenseCloneLimit: document.getElementById('license-clone-limit'),
+  donateCard: document.getElementById('donate-card'),
+  btnCopyDonateAccount: document.getElementById('btn-copy-donate-account'),
+  btnCopyDonateMessage: document.getElementById('btn-copy-donate-message'),
+
   // App Settings Elements
   appSettingsGroups: document.getElementById('app-settings-groups'),
   appSettingsName: document.getElementById('app-settings-name'),
@@ -113,7 +130,29 @@ const els = {
   btnAppSave: document.getElementById('btn-app-save'),
   btnAppShortcut: document.getElementById('btn-app-shortcut'),
   btnAppKill: document.getElementById('btn-app-kill'),
-  btnAppDelete: document.getElementById('btn-app-delete')
+  btnAppDelete: document.getElementById('btn-app-delete'),
+
+  appCurrentVersion: document.getElementById('app-current-version'),
+  updateLatestVersion: document.getElementById('update-latest-version'),
+  updateStatusLabel: document.getElementById('update-status-label'),
+  updateStatusDetail: document.getElementById('update-status-detail'),
+  updateProgressBar: document.getElementById('update-progress-bar'),
+  autoUpdateToggle: document.getElementById('auto-update-toggle'),
+  btnCheckUpdate: document.getElementById('btn-check-update'),
+  btnOpenUpdateDownload: document.getElementById('btn-open-update-download'),
+  btnDownloadUpdate: document.getElementById('btn-download-update'),
+  btnInstallUpdate: document.getElementById('btn-install-update'),
+  updateModal: document.getElementById('update-modal'),
+  updateModalTitle: document.getElementById('update-modal-title'),
+  updateModalVersion: document.getElementById('update-modal-version'),
+  updateModalMessage: document.getElementById('update-modal-message'),
+  updateReleaseNotes: document.getElementById('update-release-notes'),
+  updatePageReleaseNotes: document.getElementById('update-page-release-notes'),
+  btnCloseUpdateModal: document.getElementById('btn-close-update-modal'),
+  btnUpdateLater: document.getElementById('btn-update-later'),
+  btnModalOpenDownload: document.getElementById('btn-modal-open-download'),
+  btnModalDownloadUpdate: document.getElementById('btn-modal-download-update'),
+  btnModalInstallUpdate: document.getElementById('btn-modal-install-update')
 };
 
 // Global State
@@ -125,20 +164,69 @@ let groups = [];
 let activeGroupFilters = []; // Array of strings
 let selectedClones = new Set(); // For bulk select feature
 let globalAppSettings = {}; // Cache for fallback
+let updateState = {
+  status: 'idle',
+  currentVersion: '',
+  latestVersion: '',
+  hasUpdate: false,
+  downloadUrl: '',
+  releaseUrl: '',
+  downloadedFile: '',
+  progress: 0,
+  message: ''
+};
+const SOCIAL_LINKS = {
+  zalo: 'https://zalo.me/0385253882',
+  facebook: 'https://www.facebook.com/hohuybao',
+  website: 'https://toolchat.id.vn'
+};
+let licenseState = {
+  activated: true,
+  valid: true,
+  tier: 'free',
+  tierName: 'Toàn quyền',
+  limits: { maxClones: Infinity, batchCreate: true, name: 'Toàn quyền' },
+  features: { batch: true, proxy: true }
+};
 
-// Saved credentials (stored in localStorage for persistence)
-let savedCredentials = {};
+let credentialPresence = {};
 
-function loadSavedCredentials() {
+async function resolveAssetUrl(relativePath) {
   try {
-    const data = localStorage.getItem('savedCredentials');
+    const result = await window.launcherAPI?.resolveAssetUrl?.(relativePath);
+    if (result?.ok && result.url) return result.url;
+  } catch (_) { }
+  return relativePath;
+}
+
+async function resolveStaticImages() {
+  const images = Array.from(document.querySelectorAll('img[src^="./assets/"], img[src^="assets/"]'));
+  await Promise.all(images.map(async (img) => {
+    const originalSrc = img.getAttribute('src');
+    const resolved = await resolveAssetUrl(originalSrc);
+    if (resolved && resolved !== originalSrc) {
+      img.style.removeProperty('display');
+      img.src = resolved;
+    }
+  }));
+}
+
+function parseLegacySavedCredentials(data) {
+  try {
     if (data) {
-      savedCredentials = JSON.parse(data);
+      try {
+        const decrypted = decodeURIComponent(escape(atob(data)));
+        if (decrypted && decrypted.startsWith("{")) {
+          return JSON.parse(decrypted);
+        }
+      } catch (ignore) { }
+
+      return JSON.parse(data);
     }
   } catch (e) {
-    console.warn('Failed to load saved credentials:', e);
-    savedCredentials = {};
+    console.warn('Failed to parse legacy credentials:', e);
   }
+  return {};
 }
 
 // Global App Settings Accessor
@@ -146,34 +234,50 @@ function getGlobalAppSetting(key) {
   return globalAppSettings[key] || "";
 }
 
-function saveSavedCredentials() {
+async function migrateLegacySavedCredentials() {
   try {
-    localStorage.setItem('savedCredentials', JSON.stringify(savedCredentials));
+    const data = localStorage.getItem('savedCredentials');
+    const legacyCredentials = parseLegacySavedCredentials(data);
+    const entries = Object.entries(legacyCredentials || {}).filter((entry) => entry[0] && entry[1]);
+    let migratedAll = true;
+    for (const [username, password] of entries) {
+      const res = await window.launcherAPI?.saveCredential?.({ username, password });
+      credentialPresence[username] = !!res?.ok;
+      if (!res?.ok) migratedAll = false;
+    }
+    if (data && migratedAll) {
+      localStorage.removeItem('savedCredentials');
+    }
   } catch (e) {
-    console.warn('Failed to save credentials:', e);
+    console.warn('Failed to migrate legacy credentials:', e);
   }
 }
 
-function hasCredentialForUser(username) {
-  return !!savedCredentials[username];
+async function hasCredentialForUser(username) {
+  if (!username) return false;
+  if (Object.prototype.hasOwnProperty.call(credentialPresence, username)) {
+    return !!credentialPresence[username];
+  }
+  const res = await window.launcherAPI?.hasCredential?.(username);
+  credentialPresence[username] = !!res?.hasCredential;
+  return credentialPresence[username];
 }
 
-function getCredentialForUser(username) {
-  return savedCredentials[username] || null;
+async function saveCredentialForUser(username, password) {
+  if (!username || !password) return { ok: false };
+  const res = await window.launcherAPI?.saveCredential?.({ username, password });
+  credentialPresence[username] = !!res?.ok;
+  return res || { ok: false };
 }
 
-function saveCredentialForUser(username, password) {
-  savedCredentials[username] = password;
-  saveSavedCredentials();
+async function clearCredentialForUser(username) {
+  if (!username) return { ok: false };
+  const res = await window.launcherAPI?.deleteCredential?.(username);
+  credentialPresence[username] = false;
+  return res || { ok: false };
 }
 
-function clearCredentialForUser(username) {
-  delete savedCredentials[username];
-  saveSavedCredentials();
-}
-
-// Load saved credentials on startup
-loadSavedCredentials();
+migrateLegacySavedCredentials();
 
 // Load app logo dynamically
 (function loadAppLogo() {
@@ -196,6 +300,15 @@ loadSavedCredentials();
       };
       img.src = src;
     }
+
+    resolveAssetUrl('./assets/icon.png').then((src) => {
+      if (!loaded && src) {
+        loaded = true;
+        logo.src = src;
+        logo.style.display = 'block';
+        if (fallback) fallback.style.display = 'none';
+      }
+    });
   }
 })();
 
@@ -230,6 +343,24 @@ function showStatus(msg, type = 'info') {
   setTimeout(() => {
     els.statusBar.classList.add('hidden');
   }, 3000);
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return true;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  return copied;
 }
 
 function switchView(viewId) {
@@ -331,8 +462,182 @@ async function loadAppSettings() {
       // Update Settings View inputs
       if (els.singleStoragePath) els.singleStoragePath.value = s.cloneRoot || "";
       if (els.settingUserDataRoot) els.settingUserDataRoot.value = s.userDataRoot || "";
+      if (els.autoUpdateToggle) els.autoUpdateToggle.checked = Boolean(s.autoUpdateEnabled);
     }
   }
+}
+
+function renderUpdateState(state = updateState) {
+  updateState = { ...updateState, ...(state || {}) };
+  const status = updateState.status || 'idle';
+  const progress = Number(updateState.progress || 0);
+  const hasUpdate = Boolean(updateState.hasUpdate || updateState.downloadUrl);
+  const downloaded = status === 'downloaded' || Boolean(updateState.downloadedFile);
+
+  if (els.updateStatusLabel) {
+    if (status === 'checking') els.updateStatusLabel.textContent = 'Đang kiểm tra cập nhật...';
+    else if (status === 'available') els.updateStatusLabel.textContent = 'Có phiên bản mới';
+    else if (status === 'downloading') els.updateStatusLabel.textContent = `Đang tải bản cập nhật${progress ? ` ${progress}%` : ''}`;
+    else if (status === 'downloaded') els.updateStatusLabel.textContent = 'Đã tải xong bản cập nhật';
+    else if (status === 'installing') els.updateStatusLabel.textContent = 'Đang mở trình cài đặt...';
+    else if (status === 'error') els.updateStatusLabel.textContent = 'Cập nhật đang gặp lỗi';
+    else els.updateStatusLabel.textContent = 'Chưa kiểm tra';
+  }
+
+  if (els.updateStatusDetail) {
+    els.updateStatusDetail.textContent = updateState.message || 'Bấm nút bên dưới để kiểm tra phiên bản mới.';
+  }
+
+  if (els.updateProgressBar) {
+    els.updateProgressBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+  }
+
+  if (els.updateLatestVersion) {
+    els.updateLatestVersion.textContent = updateState.latestVersion || 'Chưa kiểm tra';
+  }
+
+  if (els.updatePageReleaseNotes) {
+    els.updatePageReleaseNotes.textContent = updateState.releaseNotes || 'Chưa có ghi chú phát hành. Hãy bấm kiểm tra cập nhật.';
+  }
+
+  els.btnOpenUpdateDownload?.classList.toggle('hidden', !hasUpdate || !updateState.downloadUrl);
+  els.btnDownloadUpdate?.classList.toggle('hidden', !hasUpdate || !updateState.downloadUrl || downloaded);
+  els.btnInstallUpdate?.classList.toggle('hidden', !downloaded);
+  els.btnModalOpenDownload?.classList.toggle('hidden', !hasUpdate || !updateState.downloadUrl || downloaded);
+  els.btnModalDownloadUpdate?.classList.toggle('hidden', !hasUpdate || !updateState.downloadUrl || downloaded);
+  els.btnModalInstallUpdate?.classList.toggle('hidden', !downloaded);
+
+  const busy = status === 'checking' || status === 'downloading' || status === 'installing';
+  if (els.btnCheckUpdate) els.btnCheckUpdate.disabled = busy;
+  if (els.btnDownloadUpdate) els.btnDownloadUpdate.disabled = busy;
+  if (els.btnModalDownloadUpdate) els.btnModalDownloadUpdate.disabled = busy;
+}
+
+function openUpdateModal() {
+  if (!els.updateModal) return;
+  if (els.updateModalVersion) {
+    els.updateModalVersion.textContent = `${updateState.currentVersion || '...'} → ${updateState.latestVersion || '...'}`;
+  }
+  if (els.updateModalMessage) {
+    els.updateModalMessage.textContent = updateState.message || 'Bản mới đã sẵn sàng.';
+  }
+  if (els.updateReleaseNotes) {
+    els.updateReleaseNotes.textContent = updateState.releaseNotes || 'Không có ghi chú phát hành.';
+  }
+  els.updateModal.classList.remove('hidden');
+  renderUpdateState(updateState);
+}
+
+function closeUpdateModal() {
+  els.updateModal?.classList.add('hidden');
+}
+
+async function loadAppVersion() {
+  try {
+    const res = await window.launcherAPI?.getAppVersion?.();
+    if (res?.ok && els.appCurrentVersion) {
+      els.appCurrentVersion.textContent = res.version || '...';
+      updateState.currentVersion = res.version || '';
+    }
+  } catch (_) {
+    if (els.appCurrentVersion) els.appCurrentVersion.textContent = '...';
+  }
+}
+
+async function handleCheckUpdate({ silent = false, autoDownload = false } = {}) {
+  try {
+    renderUpdateState({ status: 'checking', progress: 0, message: 'Đang kiểm tra cập nhật...' });
+    const res = await window.launcherAPI?.checkForUpdates?.();
+    renderUpdateState(res || {});
+    if (res?.hasUpdate) {
+      if (!silent) openUpdateModal();
+      if (autoDownload) await handleDownloadUpdate();
+      return res;
+    }
+    if (!silent) showStatus(res?.message || 'Bạn đang dùng phiên bản mới nhất.', 'success');
+    return res;
+  } catch (error) {
+    renderUpdateState({ status: 'error', message: error.message || 'Kiểm tra cập nhật thất bại.' });
+    if (!silent) showStatus(updateState.message, 'error');
+    return null;
+  }
+}
+
+async function handleOpenUpdateDownload() {
+  const url = updateState.downloadUrl || updateState.releaseUrl;
+  if (!url) {
+    showStatus('Chưa có link tải update.', 'error');
+    return;
+  }
+  const res = await window.launcherAPI?.openExternalUrl?.(url);
+  if (!res?.ok) showStatus(res?.message || 'Không mở được link tải.', 'error');
+}
+
+async function handleDownloadUpdate() {
+  if (!updateState.downloadUrl) {
+    showStatus('Chưa có link tải update.', 'error');
+    return null;
+  }
+  renderUpdateState({ status: 'downloading', progress: 0, message: 'Đang tải bản cập nhật...' });
+  const res = await window.launcherAPI?.downloadUpdate?.({
+    downloadUrl: updateState.downloadUrl,
+    latestVersion: updateState.latestVersion,
+    checksumUrl: updateState.checksumUrl
+  });
+  renderUpdateState(res || {});
+  if (res?.status === 'downloaded') {
+    openUpdateModal();
+    showStatus('Đã tải xong bản cập nhật.', 'success');
+  } else if (!res?.ok) {
+    showStatus(res?.message || 'Tải bản cập nhật thất bại.', 'error');
+  }
+  return res;
+}
+
+async function handleInstallUpdate() {
+  if (!updateState.downloadedFile) {
+    showStatus('Chưa có file update đã tải.', 'error');
+    return;
+  }
+  const confirmed = window.confirm('App sẽ mở trình cài đặt bản mới và đóng phiên hiện tại. Tiếp tục?');
+  if (!confirmed) return;
+  await window.launcherAPI?.installDownloadedUpdate?.({ filePath: updateState.downloadedFile });
+}
+
+function initUpdateSection() {
+  loadAppVersion();
+  renderUpdateState(updateState);
+
+  els.btnCheckUpdate?.addEventListener('click', () => handleCheckUpdate());
+  els.btnOpenUpdateDownload?.addEventListener('click', handleOpenUpdateDownload);
+  els.btnModalOpenDownload?.addEventListener('click', handleOpenUpdateDownload);
+  els.btnDownloadUpdate?.addEventListener('click', handleDownloadUpdate);
+  els.btnModalDownloadUpdate?.addEventListener('click', handleDownloadUpdate);
+  els.btnInstallUpdate?.addEventListener('click', handleInstallUpdate);
+  els.btnModalInstallUpdate?.addEventListener('click', handleInstallUpdate);
+  els.btnCloseUpdateModal?.addEventListener('click', closeUpdateModal);
+  els.btnUpdateLater?.addEventListener('click', closeUpdateModal);
+
+  els.autoUpdateToggle?.addEventListener('change', async (event) => {
+    const enabled = Boolean(event.target.checked);
+    globalAppSettings = { ...globalAppSettings, autoUpdateEnabled: enabled };
+    await window.launcherAPI?.updateAppSettings?.({ autoUpdateEnabled: enabled });
+    showStatus(enabled ? 'Đã bật tự động cập nhật.' : 'Đã tắt tự động cập nhật.', 'success');
+    if (enabled) handleCheckUpdate({ silent: true, autoDownload: true });
+  });
+
+  document.querySelectorAll('.social-link-btn').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const key = button.dataset.socialLink;
+      const url = SOCIAL_LINKS[key];
+      if (!url) {
+        showStatus('Link liên hệ chưa được cấu hình.', 'error');
+        return;
+      }
+      const res = await window.launcherAPI?.openExternalUrl?.(url);
+      if (!res?.ok) showStatus(res?.message || 'Không mở được link liên hệ.', 'error');
+    });
+  });
 }
 
 function renderSingleGroupSelect() {
@@ -390,6 +695,10 @@ function initSettingsListeners() {
   // Settings: Manual Create User
   if (els.btnCreateUserSetting) {
     els.btnCreateUserSetting.onclick = async (e) => {
+      // CRITICAL: Check and disable IMMEDIATELY to prevent double-click
+      if (els.btnCreateUserSetting.disabled) return;
+      els.btnCreateUserSetting.disabled = true;
+
       e.stopPropagation();
       e.preventDefault();
 
@@ -404,14 +713,12 @@ function initSettingsListeners() {
       }
 
       if (!u || !p) {
-        showStatus("Vui lòng nhập User và Pass", "error");
+        showStatus("Vui lòng nhập Tên Profile và Pass", "error");
+        els.btnCreateUserSetting.disabled = false; // Re-enable on validation failure
         return;
       }
 
-      if (els.btnCreateUserSetting.disabled) return;
-      els.btnCreateUserSetting.disabled = true;
-
-      showLoading("Đang tạo User...");
+      showLoading("Đang tạo Profile...");
       try {
         const res = await window.launcherAPI.createLocalUser({
           username: u, password: p, proxy: Prx, profileDir: path
@@ -466,15 +773,7 @@ function initAutoFillListeners() {
 
 
 
-  // Also handle Browse Folder in Add Single View to avoid duplicates
-  if (els.btnBrowseFolder) {
-    els.btnBrowseFolder.onclick = async () => {
-      const folder = await window.launcherAPI.selectFolder();
-      if (folder) {
-        if (els.singleCloneTarget) els.singleCloneTarget.value = folder;
-      }
-    };
-  }
+
 }
 
 function updateUserSelects() {
@@ -535,13 +834,13 @@ function renderSettingsUserList() {
   document.querySelectorAll('.btn-delete-user').forEach(btn => {
     btn.onclick = async (e) => {
       const u = e.currentTarget.getAttribute('data-user');
-      if (confirm(`Bạn có chắc muốn xóa user "${u}"?\nUser này sẽ bị xóa khỏi hệ thống Windows.`)) {
-        showLoading("Đang xóa User...", "Vui lòng chờ...");
+      if (confirm(`Bạn có chắc muốn xóa Profile "${u}"?\nProfile này sẽ bị xóa khỏi hệ thống Windows.`)) {
+        showLoading("Đang xóa Profile...", "Vui lòng chờ...");
         try {
           const res = await window.launcherAPI.deleteTrackedUser(u);
           hideLoading();
           if (res.ok) {
-            showStatus(`Đã xóa user ${u}`, "success");
+            showStatus(`Đã xóa Profile ${u}`, "success");
             loadUsers(); // Reload list
           } else {
             showStatus(`Lỗi: ${res.message}`, "error");
@@ -584,10 +883,16 @@ function renderCloneGrid() {
 }
 
 const ICONS = {
-  zalo: "https://lh3.googleusercontent.com/aida-public/AB6AXuC2UZmz-gHnORYf7coDXx2BP90aYWuAJ5NV-PAtrbhRwW6Os94X--DLIYMlh1Q29ETZBdbE9OlwOWBtiQIpOpOo-xHEJMrbnvG_sIxfraRqOkYerVL2-GHZmQjW-d-p5fZaZIKywSqx1xVXYltQBCkbzfLu9-SHNsW05T_fbhfy289UsdlPv1GAz_E29udwRzE9ztCmsW6FmQdmALncuIbFFfY_OMBCI96CFSk1LH4Cqz07kF0dHALG_p8I6FitmDNt2b-HQpkYg0Q",
-  chrome: "https://upload.wikimedia.org/wikipedia/commons/e/e1/Google_Chrome_icon_%28February_2022%29.svg",
-  default: "https://cdn-icons-png.flaticon.com/512/2666/2666505.png" // Generic App Icon
+  zalo: "./assets/zalo.png",
+  chrome: "./assets/chrome.svg",
+  default: "./assets/icon.png" // Generic App Icon
 };
+
+async function resolveKnownAssetUrls() {
+  await Promise.all(Object.keys(ICONS).map(async (key) => {
+    ICONS[key] = await resolveAssetUrl(ICONS[key]);
+  }));
+}
 
 function getAppIcon(clone) {
   const path = (clone.exec_path || "").toLowerCase();
@@ -644,8 +949,8 @@ function createCloneCardElement(clone) {
             <div class="size-14 rounded-xl bg-white/5 flex items-center justify-center p-2 shadow-inner border border-white/5 mb-1 group-hover:scale-110 transition-transform duration-300">
                 <img id="${iconId}" src="${cachedIcon || defaultIcon}" class="w-full h-full object-contain filter drop-shadow-md" alt="Icon">
             </div>
-            <h3 class="text-white text-base font-bold leading-tight group-hover:text-neon-blue transition-colors text-center truncate w-full tracking-wide" title="${displayName}">${displayName}</h3>
-            <p class="text-slate-500 text-xs font-medium text-center truncate w-full px-2 font-mono group-hover:text-slate-300 transition-colors" title="${clone.username}">${clone.username}</p>
+            <h3 class="text-white text-base font-bold leading-tight group-hover:text-neon-blue transition-colors text-center truncate w-full tracking-wide" title="${displayName.replace(/"/g, '&quot;')}">${displayName.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h3>
+            <p class="text-slate-500 text-xs font-medium text-center truncate w-full px-2 font-mono group-hover:text-slate-300 transition-colors" title="${clone.username.replace(/"/g, '&quot;')}">${clone.username.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
         </div>
         <div class="mt-auto w-full pt-1 flex justify-center">
             <button class="btn-launch w-full h-9 bg-neon-blue/10 hover:bg-neon-blue/30 border border-neon-blue/30 hover:border-neon-blue text-neon-blue hover:text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 uppercase tracking-wider backdrop-blur-sm shadow-[0_0_10px_rgba(0,240,255,0.1)] hover:shadow-[0_0_15px_rgba(0,240,255,0.4)]">
@@ -752,7 +1057,7 @@ function updateBulkActionBar() {
     const clonesToDelete = trackedClones.filter(c => selectedClones.has(c.id));
     for (const clone of clonesToDelete) {
       try {
-        await window.launcherAPI.deleteTrackedApp(clone.id);
+        await window.launcherAPI.deleteTrackedApp({ appId: clone.id, clone: clone });
       } catch (e) {
         console.error('Error deleting clone:', clone.id, e);
       }
@@ -862,44 +1167,35 @@ async function launchClone(clone) {
     let password = null;
     let saveCredential = false;
 
-    // Check if we have saved credential for this user
-    if (hasCredentialForUser(clone.username)) {
-      password = getCredentialForUser(clone.username);
+    const hasCredential = await hasCredentialForUser(clone.username);
+    if (hasCredential) {
       showStatus(`Đang chạy ${clone.username} với credential đã lưu...`);
     } else {
-      // Show password dialog for authentication
       const result = await showPasswordModal(clone);
       if (!result) {
-        // User cancelled
         return;
       }
       password = result.password;
       saveCredential = result.saveCredential;
-
-      // Save credential if user checked the save checkbox
-      if (saveCredential && password) {
-        saveCredentialForUser(clone.username, password);
-      }
     }
 
-    // Launch with password
     const payload = {
       programPath: clone.exec_path,
       username: clone.username,
       proxy: proxy,
       password: password,
-      saveCredential: saveCredential
+      saveCredential: saveCredential,
+      skipCredentialCache: !hasCredential && !saveCredential
     };
 
     const res = await window.launcherAPI.launchClone(payload);
 
     if (res.ok) {
+      if (saveCredential) credentialPresence[clone.username] = true;
       showStatus("Đã khởi chạy thành công!", "success");
     } else if (res.passwordWrong) {
-      // Password was wrong - clear saved credential and retry
-      clearCredentialForUser(clone.username);
+      await clearCredentialForUser(clone.username);
       showStatus("Sai mật khẩu! Vui lòng nhập lại.", "error");
-      // Retry launch to show password dialog again
       setTimeout(() => launchClone(clone), 500);
     } else {
       showStatus(res.message || "Lỗi khởi chạy không xác định.", "error");
@@ -916,7 +1212,7 @@ async function launchClone(clone) {
 // Nav
 // Nav
 function updateNavState(activeId) {
-  const navs = [els.navDashboard, els.navSettings, els.navAccount];
+  const navs = [els.navDashboard, els.navSettings, els.navUpdate, els.navAccount];
   navs.forEach(btn => {
     if (!btn) return;
     if (btn.id === activeId) {
@@ -1097,8 +1393,9 @@ if (els.btnAppShortcut) els.btnAppShortcut.onclick = async () => {
   if (!currentSettingsClone) return;
   try {
     const override = cloneOverrides[currentSettingsClone.id] || {};
+    const username = currentSettingsClone.username;
     await window.launcherAPI.createCloneShortcut({
-      username: currentSettingsClone.username,
+      username: username,
       appId: currentSettingsClone.id,
       execPath: currentSettingsClone.exec_path,
       iconPath: currentSettingsClone.icon_path || "",
@@ -1144,7 +1441,7 @@ if (els.btnAppDelete) els.btnAppDelete.onclick = async () => {
     if (!confirmDelete) return;
 
     // 1. Delete app registry tracking
-    await window.launcherAPI.deleteTrackedApp(currentSettingsClone.id);
+    await window.launcherAPI.deleteTrackedApp({ appId: currentSettingsClone.id, clone: currentSettingsClone });
 
     // 2. Delete local user ONLY if not shared
     if (deleteUser) {
@@ -1168,55 +1465,10 @@ if (els.btnAppDelete) els.btnAppDelete.onclick = async () => {
 };
 
 // [REMOVED] Duplicate listener - main handler in initSettingsListeners()
-
-// Settings Create User Logic
-// [REMOVED] Auto-generate user button logic
-
-els.btnCreateUserSetting?.addEventListener('click', async () => {
-  const username = els.settingUserName?.value.trim();
-  const password = els.settingUserPass?.value;
-  const proxy = els.settingUserProxy?.value.trim();
-  const saveCred = els.settingSaveCred?.checked;
-
-  if (!username || !password) {
-    showStatus("Vui lòng nhập Username và Password!", "error");
-    return;
-  }
-
-  showStatus("Đang tạo User...", "info");
-  try {
-    const payload = {
-      username: username,
-      password: password,
-      proxy: proxy,
-      saveCred: saveCred
-    };
-    const result = await window.launcherAPI.createLocalUser(payload);
-    if (result.ok) {
-      showStatus(`Đã tạo User ${username} thành công!`, "success");
-      loadUsers(); // Refresh user list
-      // Clear inputs
-      els.settingUserName.value = "";
-      els.settingUserPass.value = "";
-      els.settingUserProxy.value = "";
-
-      // Save proxy preference for this user
-      if (proxy) {
-        await window.launcherAPI.updateCloneOverride({
-          appId: username, // Use username as key
-          proxy: proxy
-        });
-        cloneOverrides[username] = { proxy: proxy };
-      }
-    } else {
-      showStatus(`Lỗi tạo User: ${result.message}`, "error");
-    }
-  } catch (e) {
-    showStatus("Lỗi tạo user: " + e.message, "error");
-  }
-});
+// [REMOVED] Settings Create User Logic - already handled in initSettingsListeners() at line 590
 
 // -----------------------------------------------------------------------------
+
 
 els.navDashboard?.addEventListener('click', () => {
   switchView('view-dashboard');
@@ -1226,6 +1478,11 @@ els.navSettings?.addEventListener('click', () => {
   switchView('view-settings');
   updateNavState('nav-settings');
   loadUsers(); // Refresh list when modifying settings
+});
+els.navUpdate?.addEventListener('click', () => {
+  switchView('view-update');
+  updateNavState('nav-update');
+  renderUpdateState(updateState);
 });
 els.btnBackFromSingle?.addEventListener('click', () => {
   switchView('view-dashboard');
@@ -1310,6 +1567,11 @@ els.singleUsername?.addEventListener('change', () => {
 // [REMOVED] Duplicate listener - main handler in initSettingsListeners()
 
 els.btnCreateSingle?.addEventListener('click', async () => {
+  if (!canCreateMoreClones()) {
+    showStatus("Không thể tạo thêm clone trong phiên hiện tại.", "error");
+    return;
+  }
+
   const username = els.singleUsername.value;
   const programPath = els.singleProgramPath.value;
   const exeName = els.singleExeName.value;
@@ -1317,6 +1579,11 @@ els.btnCreateSingle?.addEventListener('click', async () => {
   const cloneName = els.singleCloneName.value;
   const proxy = els.singleProxy.value;
   const force = els.singleForceClone.checked;
+
+  if (proxy && !licenseState?.features?.proxy) {
+    showStatus("Proxy đang được bật cho chế độ toàn quyền.", "error");
+    return;
+  }
 
   // Get selected group from dropdown
   const selectedGroup = els.singleGroupSelect?.value || "";
@@ -1368,7 +1635,7 @@ els.btnCreateSingle?.addEventListener('click', async () => {
     if (username === "NEW_USER") {
       finalUsername = `User_${Date.now()}`;
       // Windows forbids password containing username. Use a fixed strong password.
-      const autoPass = "Hhbspace@2026";
+      const autoPass = "CloneApp@2026";
 
       showLoading("Đang khởi tạo User mới...", "Hệ thống đang tạo user Windows riêng biệt...");
 
@@ -1434,26 +1701,21 @@ els.btnCreateSingle?.addEventListener('click', async () => {
 });
 
 // Auto extract exe name on input/paste
-els.singleProgramPath?.addEventListener('input', (e) => {
-  const val = e.target.value;
-  // Simple check: if it ends with .exe, extract it
-  if (val && val.toLowerCase().includes('.exe')) {
-    const exe = extractExeName(val);
-    if (exe && exe.toLowerCase().endsWith('.exe')) {
-      els.singleExeName.value = exe;
-      // Also remove quotes if present in the input for cleaner path
-      if (val.includes('"')) {
-        e.target.value = val.replace(/"/g, '');
-      }
-    }
-  }
-});
+// [REMOVED] 'input' listener causing lag. Logic moved to 'change'.
 
 els.singleProgramPath?.addEventListener('change', async (e) => {
   let val = e.target.value.trim();
   if (val.includes('"')) {
     val = val.replace(/"/g, '');
     e.target.value = val;
+  }
+
+  // Auto extract exe name on change
+  if (val && val.toLowerCase().includes('.exe')) {
+    const exe = extractExeName(val);
+    if (exe && exe.toLowerCase().endsWith('.exe') && !els.singleExeName.value) {
+      els.singleExeName.value = exe;
+    }
   }
 
   // If it looks like a directory (no .exe extension), scan for executables silently
@@ -1598,6 +1860,7 @@ els.btnStartBatch?.addEventListener('click', async () => {
   const programPath = els.batchProgramPath?.value?.trim();
   const exeName = els.batchExeName?.value?.trim();
   const cloneDir = els.batchCloneDir?.value?.trim();
+  const batchPassword = els.batchPassword?.value?.trim();
   const prefix = els.batchPrefix?.value?.trim() || 'Clone_';
   const count = parseInt(els.batchCount?.value) || 10;
   const userDataPath = els.batchUserDataPath?.value?.trim();
@@ -1606,10 +1869,30 @@ els.btnStartBatch?.addEventListener('click', async () => {
 
   const proxyList = proxyListText.split('\n').map(p => p.trim()).filter(p => p);
 
+  if (proxyList.length > 0 && !licenseState?.features?.proxy) {
+    showStatus("Proxy đang được bật cho chế độ toàn quyền.", "error");
+    return;
+  }
+
   if (!programPath) { showStatus("Vui lòng nhập đường dẫn app gốc!", "error"); return; }
   if (!exeName) { showStatus("Vui lòng nhập tên file .exe!", "error"); return; }
   if (!cloneDir) { showStatus("Vui lòng chọn thư mục lưu clone!", "error"); return; }
+  if (!batchPassword) { showStatus("Vui lòng nhập mật khẩu cho Profile hàng loạt!", "error"); return; }
   if (count < 1 || count > 500) { showStatus("Số lượng tạo phải từ 1 đến 500!", "error"); return; }
+
+  if (!licenseState?.features?.batch) {
+    showStatus("Tính năng tạo hàng loạt đang được bật cho chế độ toàn quyền.", "error");
+    return;
+  }
+
+  if (licenseState.limits?.maxClones !== Infinity) {
+    const max = licenseState.limits?.maxClones || 500;
+    const current = trackedClones.length;
+    if (current + count > max) {
+      showStatus(`Không thể tạo thêm ${count} bản sao trong phiên hiện tại.`, "error");
+      return;
+    }
+  }
 
   let sourcePath = programPath;
   if (!sourcePath.toLowerCase().endsWith('.exe')) {
@@ -1618,7 +1901,6 @@ els.btnStartBatch?.addEventListener('click', async () => {
     sourcePath = sourcePath + '\\' + safeExe;
   }
 
-  const defaultPassword = 'Hhbspace@2026';
   let successCount = 0;
   let failCount = 0;
   batchCancelled = false;
@@ -1638,7 +1920,7 @@ els.btnStartBatch?.addEventListener('click', async () => {
 
     try {
       const userRes = await window.launcherAPI.createLocalUser({
-        username: profileName, password: defaultPassword, saveCredential: true,
+        username: profileName, password: batchPassword, saveCredential: true,
         userDataPath: userDataPath || undefined, proxy: proxy || undefined
       });
 
@@ -1922,15 +2204,203 @@ els.inputNewGroup?.addEventListener('keypress', (e) => {
   }
 });
 
+// =============================================================================
+// ACCESS / ACCOUNT TAB
+// =============================================================================
+
+async function loadLicenseStatus() {
+  if (!window.licenseAPI) return;
+  try {
+    const result = await window.licenseAPI.verify();
+    licenseState = {
+      activated: true,
+      valid: true,
+      tier: result.tier || 'free',
+      tierName: result.tierName || 'Toàn quyền',
+      limits: result.limits || { maxClones: Infinity, batchCreate: true, name: 'Toàn quyền' },
+      features: result.features || { batch: true, proxy: true }
+    };
+    updateLicenseUI(licenseState);
+  } catch (e) {
+    console.error('Failed to verify access status:', e);
+    // Nếu lỗi mạng, fallback về getStatus (offline mode)
+    try {
+      const status = await window.licenseAPI.getStatus();
+      licenseState = status;
+      updateLicenseUI(status);
+    } catch (e2) {
+      console.error('Failed to get access status:', e2);
+    }
+  }
+}
+
+function updateLicenseUI(status) {
+  const tierMap = {
+    free: { name: 'Toàn quyền', badge: 'Đã mở khóa', color: 'bg-gradient-to-r from-neon-green to-neon-blue text-black' },
+    plus: { name: 'Plus', badge: 'Plus', color: 'bg-neon-purple text-white' },
+    ultra: { name: 'Ultra', badge: 'Ultra 🚀', color: 'bg-gradient-to-r from-neon-purple to-neon-blue text-white' }
+  };
+
+  const tier = (status.tier || 'free').toLowerCase();
+  const info = tierMap[tier] || tierMap.free;
+
+  if (els.licenseTierName) els.licenseTierName.textContent = info.name;
+  if (els.licenseTierBadge) {
+    els.licenseTierBadge.textContent = info.badge;
+    els.licenseTierBadge.className = `px-4 py-2 rounded-full text-sm font-bold ${info.color}`;
+  }
+
+  // Icon color based on tier
+  if (els.licenseTierIcon) {
+    const icon = els.licenseTierIcon.querySelector('span');
+    if (tier === 'ultra' || tier === 'free') {
+      els.licenseTierIcon.className = 'size-12 rounded-full bg-gradient-to-r from-neon-purple to-neon-blue flex items-center justify-center';
+      if (icon) icon.className = 'material-symbols-outlined text-[24px] text-white';
+    } else if (tier === 'plus') {
+      els.licenseTierIcon.className = 'size-12 rounded-full bg-neon-purple flex items-center justify-center';
+      if (icon) icon.className = 'material-symbols-outlined text-[24px] text-white';
+    } else {
+      els.licenseTierIcon.className = 'size-12 rounded-full bg-slate-700 flex items-center justify-center';
+      if (icon) icon.className = 'material-symbols-outlined text-[24px] text-slate-400';
+    }
+  }
+
+  // Expiry date (hide for free tier)
+  if (els.licenseExpiryRow) {
+    if (status.expiresAt && tier !== 'free') {
+      els.licenseExpiryRow.classList.remove('hidden');
+      els.licenseExpiryRow.classList.add('flex');
+      if (els.licenseExpiryDate) {
+        const date = new Date(status.expiresAt);
+        els.licenseExpiryDate.textContent = date.toLocaleDateString('vi-VN');
+      }
+    } else {
+      els.licenseExpiryRow.classList.add('hidden');
+      els.licenseExpiryRow.classList.remove('flex');
+    }
+  }
+
+  // Clone usage
+  const cloneCount = trackedClones.length;
+  // Ultra tier = unlimited, JSON does not support Infinity so check tier directly
+  let maxClones = Infinity;
+  if (tier === 'ultra' || tier === 'free') {
+    maxClones = Infinity;
+  } else if (tier === 'plus') {
+    maxClones = 20;
+  } else {
+    maxClones = status.limits?.maxClones ?? 5;
+  }
+
+  if (els.licenseCloneUsed) els.licenseCloneUsed.textContent = cloneCount;
+  if (els.licenseCloneLimit) {
+    els.licenseCloneLimit.textContent = maxClones === Infinity ? '∞' : maxClones;
+  }
+}
+
+function canCreateMoreClones() {
+  return true;
+}
+
+// Account/License Tab Event Listeners
+els.navAccount?.addEventListener('click', () => {
+  switchView('view-account');
+  loadLicenseStatus();
+  updateNavState('nav-account');
+});
+
+els.btnBackFromAccount?.addEventListener('click', () => {
+  switchView('view-dashboard');
+  updateNavState('nav-dashboard');
+});
+
+els.btnCopyDonateAccount?.addEventListener('click', async () => {
+  try {
+    const copied = await copyTextToClipboard('251225042004');
+    showStatus(copied ? 'Đã copy số tài khoản.' : 'Không thể copy số tài khoản.', copied ? 'success' : 'error');
+  } catch (error) {
+    showStatus('Không thể copy số tài khoản.', 'error');
+  }
+});
+
+els.btnCopyDonateMessage?.addEventListener('click', async () => {
+  try {
+    const copied = await copyTextToClipboard('Ủng hộ Clone App ULTRA');
+    showStatus(copied ? 'Đã copy nội dung chuyển khoản.' : 'Không thể copy nội dung.', copied ? 'success' : 'error');
+  } catch (error) {
+    showStatus('Không thể copy nội dung.', 'error');
+  }
+});
+
+// BLOCKING MODAL cho key bị BAN/REVOKE - KHÔNG CHO ĐÓNG
+function showBlockingBannedModal(errorMessage) {
+  // Xóa modal cũ nếu có
+  document.getElementById('banned-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'banned-modal';
+  modal.className = 'fixed inset-0 bg-slate-950/90 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm';
+  modal.innerHTML = `
+    <div class="bg-[#1e293b] p-8 rounded-2xl border border-emerald-500/50 max-w-md text-center shadow-2xl relative overflow-hidden">
+      <div class="absolute inset-0 bg-emerald-500/10 pointer-events-none"></div>
+      <div class="text-6xl mb-4">✅</div>
+      <h2 class="text-2xl font-bold text-emerald-400 mb-2">Toàn quyền đang hoạt động</h2>
+      <p class="text-gray-400 mb-6">${errorMessage || 'Cơ chế khóa license đã được gỡ bỏ.'}</p>
+      <button id="btn-close-free-full-modal" class="px-8 py-3 bg-gradient-to-r from-emerald-600 to-blue-500 hover:from-emerald-500 hover:to-blue-400 text-white rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg w-full">
+        Đóng
+      </button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  document.getElementById('btn-close-free-full-modal')?.addEventListener('click', () => {
+    modal.remove();
+  });
+}
+
+function showNuclearModal(errorMessage) {
+  // Xóa modal cũ
+  document.getElementById('banned-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 bg-slate-950/90 z-[999999] flex items-center justify-center p-4 backdrop-blur-md';
+  modal.innerHTML = `
+    <div class="bg-[#1e293b] p-10 rounded-3xl border-2 border-emerald-500/60 text-center shadow-[0_0_80px_rgba(16,185,129,0.25)] max-w-2xl relative overflow-hidden">
+      <div class="text-8xl mb-6">🛡️</div>
+      <h2 class="text-4xl font-black text-emerald-400 mb-4 tracking-widest uppercase">FULL ACCESS</h2>
+      <p class="text-white text-xl mb-8">${errorMessage || 'Chế độ bảo vệ phá hủy đã được tắt.'}</p>
+      <button id="btn-close-nuclear-disabled-modal" class="px-8 py-3 bg-gradient-to-r from-emerald-600 to-blue-500 hover:from-emerald-500 hover:to-blue-400 text-white rounded-xl font-bold transition-all shadow-lg">
+        Đóng
+      </button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('btn-close-nuclear-disabled-modal')?.addEventListener('click', () => {
+    modal.remove();
+  });
+}
+
+function checkExpiry() {
+  document.getElementById('expiry-modal')?.remove();
+  document.getElementById('expiry-toast')?.remove();
+}
 
 // Initialization
 (async function init() {
+  await resolveKnownAssetUrls();
+  await resolveStaticImages();
   initSettingsListeners();
+  initUpdateSection();
   initAutoFillListeners();
   await loadAppSettings();
   await loadGroups();
   await loadUsers();
   await loadClones();
+  await loadLicenseStatus();
+  if (globalAppSettings.autoUpdateEnabled) {
+    handleCheckUpdate({ silent: true, autoDownload: true });
+  }
+  checkExpiry();
 
   // Trigger Auto-fill initial state after data is loaded
   if (els.singleUsername && els.singleUsername.value) {

@@ -14,14 +14,42 @@ from pathlib import Path
 from typing import Optional, Tuple
 import tempfile
 import datetime
+import time
 import ctypes
 from ctypes import wintypes
 
+# FIXED: Define constants for magic numbers
 # Windows API constants for CreateProcessWithLogonW
 LOGON_WITH_PROFILE = 0x00000001
 CREATE_UNICODE_ENVIRONMENT = 0x00000400
 CREATE_NEW_CONSOLE_FLAG = 0x00000010
 
+# Shell Notification constants
+SHCNE_ASSOCCHANGED = 0x08000000
+SHCNF_IDLIST = 0x0000
+
+# Timeout constants (in milliseconds)
+DEFAULT_COMMAND_TIMEOUT_MS = 120000  # 2 minutes
+MAX_COMMAND_TIMEOUT_MS = 600000      # 10 minutes
+DEBUG_LOG_ENABLED = os.environ.get("CLONE_APP_DEBUG") == "1"
+
+
+# Windows Credential API structures
+class CREDENTIAL(ctypes.Structure):
+    _fields_ = [
+        ('Flags', wintypes.DWORD),
+        ('Type', wintypes.DWORD),
+        ('TargetName', wintypes.LPWSTR),
+        ('Comment', wintypes.LPWSTR),
+        ('LastWritten', wintypes.FILETIME),
+        ('CredentialBlobSize', wintypes.DWORD),
+        ('CredentialBlob', ctypes.POINTER(ctypes.c_byte)),
+        ('Persist', wintypes.DWORD),
+        ('AttributeCount', wintypes.DWORD),
+        ('Attributes', ctypes.c_void_p),
+        ('TargetAlias', wintypes.LPWSTR),
+        ('UserName', wintypes.LPWSTR),
+    ]
 
 # STARTUPINFO structure
 class STARTUPINFOW(ctypes.Structure):
@@ -59,11 +87,11 @@ class PROCESS_INFORMATION(ctypes.Structure):
 
 def create_process_as_user(
     username: str, password: str, command: str, working_dir: str = None
-) -> bool:
+) -> int:
     """
     Launch a process as another user using CreateProcessWithLogonW.
     This bypasses runas.exe and doesn't require console input.
-    Returns True on success, False on failure.
+    Returns 0 on success, or the Windows error code on failure.
     """
     try:
         # Split username into domain and user if needed
@@ -109,11 +137,25 @@ def create_process_as_user(
             debug_log(
                 f"CreateProcessWithLogonW SUCCESS! PID: {process_info.dwProcessId}"
             )
-            return True
+
+            # Refresh taskbar icons to pick up the correct icon
+            try:
+                # SHChangeNotify with SHCNE_ASSOCCHANGED refreshes shell icon associations
+                # FIXED: Use constants instead of magic numbers
+                ctypes.windll.shell32.SHChangeNotify(
+                    SHCNE_ASSOCCHANGED, SHCNF_IDLIST, None, None
+                )
+            except (OSError, AttributeError):
+                # FIXED: Catch specific Windows API errors
+                pass  # Non-critical, icon refresh can fail
+
+            return 0
         else:
             error_code = ctypes.get_last_error()
             error_msgs = {
                 1326: "Logon failure: unknown user name or bad password",
+                1327: "Account restriction: password expired or account disabled",
+                1907: "Password must change before first logon",
                 1314: "A required privilege is not held by the client",
                 2: "The system cannot find the file specified",
                 267: "The directory name is invalid",
@@ -123,35 +165,49 @@ def create_process_as_user(
             debug_log(
                 f"CreateProcessWithLogonW FAILED! Error {error_code}: {error_msg}"
             )
-            return False
+            return error_code
     except Exception as e:
         debug_log(f"CreateProcessWithLogonW exception: {e}")
         import traceback
 
         debug_log(traceback.format_exc())
-        return False
+        return -1
 
 
 # DEBUG LOGGING (Internal)
 def debug_log(msg: str):
+    if not DEBUG_LOG_ENABLED:
+        return
     try:
-        # Hardcode path for debugging certainty
-        debug_file = Path("d:/Clone App_ULTRA/Clone App/launcher_exec_debug.txt")
+        # Use relative path for debugging
+        debug_file = Path("launcher_exec_debug.txt")
         with open(debug_file, "a", encoding="utf-8") as f:
             f.write(f"[{datetime.datetime.now()}] {msg}\n")
-    except:
-        pass
+    except (OSError, PermissionError, IOError):
+        # FIXED: Catch specific file I/O errors instead of broad Exception
+        pass  # Silent fail for debug logging is acceptable
 
 
 # DEBUG: EARLY PROBE
-try:
-    Path("d:/Clone App_ULTRA/Clone App/alive_probe.txt").write_text(
-        "I am alive!", encoding="utf-8"
-    )
-except:
-    pass
+if DEBUG_LOG_ENABLED:
+    try:
+        Path("alive_probe.txt").write_text("I am alive!", encoding="utf-8")
+    except:
+        pass
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+# Import encrypted config module
+try:
+    from config_crypto import (
+        load_config as _load_encrypted_config,
+        save_config as _save_encrypted_config,
+    )
+
+    USE_ENCRYPTED_CONFIG = True
+except ImportError:
+    USE_ENCRYPTED_CONFIG = False
+
+# Legacy path (for migration)
 USER_REGISTRY_PATH = SCRIPT_DIR / "created_users.json"
 STARTUP_DIR = (
     Path(os.environ.get("APPDATA", ""))
@@ -163,6 +219,13 @@ STARTUP_DIR = (
 )
 USERLIST_REG_PATH = r"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList"
 
+
+def run_hidden(cmd, **kwargs):
+    if os.name == "nt" and "creationflags" not in kwargs:
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+    return subprocess.run(cmd, **kwargs)
+
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -171,12 +234,38 @@ except Exception:
 
 
 def load_registry() -> dict:
-    if not USER_REGISTRY_PATH.exists():
-        return {"users": [], "apps": []}
-    try:
-        data = json.loads(USER_REGISTRY_PATH.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
-        return {"users": [], "apps": []}
+    # Use encrypted config if available
+    if USE_ENCRYPTED_CONFIG:
+        try:
+            data = _load_encrypted_config()
+            if not data:
+                # Fallback to plaintext if encrypted is empty
+                if USER_REGISTRY_PATH.exists():
+                    try:
+                        data = json.loads(
+                            USER_REGISTRY_PATH.read_text(encoding="utf-8")
+                        )
+                    except:
+                        pass
+        except Exception:
+            # Fallback to plaintext on error
+            if USER_REGISTRY_PATH.exists():
+                try:
+                    data = json.loads(USER_REGISTRY_PATH.read_text(encoding="utf-8"))
+                except:
+                    data = {"users": [], "apps": []}
+
+    else:
+        # Fallback to plaintext (legacy)
+        if not USER_REGISTRY_PATH.exists():
+            return {"users": [], "apps": []}
+        try:
+            data = json.loads(USER_REGISTRY_PATH.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {"users": [], "apps": []}
+
+    if not data:
+        data = {"users": [], "apps": []}
 
     if isinstance(data, dict) and "apps" in data:
         users = data.get("users", [])
@@ -263,14 +352,22 @@ def load_registry() -> dict:
 
 
 def save_registry(registry: dict) -> None:
+    data = {
+        "users": registry.get("users", []),
+        "apps": registry.get("apps", []),
+    }
+
+    # Use encrypted config if available
+    if USE_ENCRYPTED_CONFIG:
+        try:
+            if _save_encrypted_config(data):
+                return
+        except Exception as exc:
+            debug_log(f"Encrypted config save failed: {exc}")
+
+    # Fallback to plaintext (legacy)
     USER_REGISTRY_PATH.write_text(
-        json.dumps(
-            {
-                "users": registry.get("users", []),
-                "apps": registry.get("apps", []),
-            },
-            indent=2,
-        ),
+        json.dumps(data, indent=2),
         encoding="utf-8",
     )
 
@@ -337,7 +434,9 @@ def ensure_user_entry(registry: dict, username: str, default_proxy: str = "") ->
         for idx, u in enumerate(users)
     }
     if normalized.lower() not in existing:
-        users.append({"username": normalized, "defaultProxy": default_proxy})
+        users.append(
+            {"username": normalized, "defaultProxy": default_proxy, "storagePath": ""}
+        )
 
 
 def find_user_by_name(registry: dict, username: str) -> Optional[dict]:
@@ -350,7 +449,7 @@ def find_user_by_name(registry: dict, username: str) -> Optional[dict]:
             if (user.get("username") or "").lower() == normalized:
                 return user
         elif isinstance(user, str) and user.lower() == normalized:
-            return {"username": user, "defaultProxy": ""}
+            return {"username": user, "defaultProxy": "", "storagePath": ""}
     return None
 
 
@@ -428,7 +527,7 @@ def is_local_domain(domain: Optional[str]) -> bool:
 
 def user_exists(local_username: str) -> bool:
     """Check whether a local SAM account already exists."""
-    result = subprocess.run(
+    result = run_hidden(
         ["net", "user", local_username],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -442,7 +541,7 @@ def create_local_user(
 ) -> None:
     """Create a local SAM account via `net user`."""
     # Capture output to detect specific errors (like Name matching Computer Name)
-    proc = subprocess.run(
+    proc = run_hidden(
         ["net", "user", local_username, password, "/add", "/expires:never"],
         capture_output=True,
         text=True,
@@ -451,17 +550,36 @@ def create_local_user(
     if proc.returncode != 0:
         if "2253" in proc.stderr or "same as computer name" in proc.stderr.lower():
             raise RuntimeError(
-                f"LOI: Username '{local_username}' trung voi Ten May Tinh (Computer Name). Vui long chon ten khac."
+                f"LỖI: Tên Profile '{local_username}' trùng với Tên Máy Tính (Computer Name). Vui lòng chọn tên khác."
             )
         # Raise generic error with output
         raise subprocess.CalledProcessError(
             proc.returncode, proc.args, output=proc.stdout, stderr=proc.stderr
         )
 
-    # Note: /expires:never in net user is sufficient. wmic is deprecated/missing on some systems.
-    subprocess.run(
+    # Set password to never expire (prevents Error 1907 after password ages out)
+    # Try PowerShell first (modern), fallback to wmic (legacy)
+    try:
+        run_hidden(
+            ["powershell", "-Command",
+             f"Set-LocalUser -Name '{local_username}' -PasswordNeverExpires $true"],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        try:
+            run_hidden(
+                ["wmic", "useraccount", "where", f"name='{local_username}'",
+                 "set", "PasswordExpires=False"],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError:
+            pass  # wmic not available on some systems
+
+    run_hidden(
         ["net", "user", local_username, "/active:yes"],
         check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     if profile_path:
         set_profile_path(local_username, profile_path)
@@ -471,7 +589,9 @@ def get_user_sid(username: str) -> Optional[str]:
     """Get the SID for a local user."""
     try:
         cmd = ["wmic", "useraccount", "where", f"name='{username}'", "get", "sid"]
-        proc = subprocess.run(cmd, capture_output=True, text=True)
+        proc = run_hidden(
+            cmd, capture_output=True, text=True, stderr=subprocess.DEVNULL
+        )
         for line in proc.stdout.splitlines():
             line = line.strip()
             if line.startswith("S-1-5-"):
@@ -484,25 +604,18 @@ def get_user_sid(username: str) -> Optional[str]:
 def set_profile_path(username: str, path: str) -> None:
     sid = get_user_sid(username)
     if not sid:
-        print(
-            f"Warning: Could not find SID for {username} to set profile path.",
-            file=sys.stderr,
-        )
-        return
+        raise RuntimeError(f"Không lấy được SID của Profile {username}.")
 
     try:
         target = Path(path).resolve()
         # Only create parent directory. Let Windows create the user directory with correct ACLs on first login.
         target.parent.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        print(
-            f"Warning: Could not create profile parent directory {path}: {e}",
-            file=sys.stderr,
-        )
+        raise RuntimeError(f"Không tạo được thư mục cha cho Profile: {e}")
 
     key = f"HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\ProfileList\\{sid}"
     try:
-        subprocess.run(
+        run_hidden(
             [
                 "reg",
                 "add",
@@ -517,10 +630,53 @@ def set_profile_path(username: str, path: str) -> None:
             ],
             check=True,
             stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
-        print(f"Set ProfileImagePath for {username} to {target}")
-    except Exception as e:
-        print(f"Warning: Failed to set ProfileImagePath: {e}", file=sys.stderr)
+    except subprocess.CalledProcessError as e:
+        detail = (
+            (e.stderr or b"").decode("utf-8", errors="ignore")
+            if isinstance(e.stderr, bytes)
+            else (e.stderr or "")
+        )
+        raise RuntimeError(
+            f"Không set được ProfileImagePath cho {username}. {detail}".strip()
+        )
+
+
+def expected_profile_path(username: str, profile_path: Optional[str] = None) -> Path:
+    if profile_path:
+        return Path(profile_path).expanduser().resolve()
+    domain, local_user = split_account(username)
+    system_drive = os.environ.get("SystemDrive", "C:") + "\\"
+    return Path(system_drive) / "Users" / local_user
+
+
+def profile_is_ready(path: Path) -> bool:
+    try:
+        return path.exists() and ((path / "NTUSER.DAT").exists() or any(path.iterdir()))
+    except PermissionError:
+        return path.exists()
+
+
+def initialize_user_profile(
+    username: str, password: str, profile_path: Optional[str] = None
+) -> Path:
+    target = expected_profile_path(username, profile_path)
+    command = r"C:\Windows\System32\cmd.exe /c exit"
+    working_dir = os.environ.get("SystemRoot", r"C:\Windows")
+    if create_process_as_user(username, password, command, working_dir) != 0:
+        raise RuntimeError(
+            "Đã tạo user nhưng không khởi tạo được Windows profile "
+            "(sai password hoặc quyền logon bị chặn)."
+        )
+
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if profile_is_ready(target):
+            return target
+        time.sleep(0.5)
+
+    raise RuntimeError(f"Đã tạo user nhưng Windows chưa tạo thư mục profile tại {target}.")
 
 
 def ensure_local_user(
@@ -546,11 +702,21 @@ def load_tracked_apps() -> list[dict]:
 
 
 def register_created_user(
-    username: str, exec_path: Optional[str], app_id: Optional[str] = None
+    username: str,
+    exec_path: Optional[str],
+    app_id: Optional[str] = None,
+    storage_path: Optional[str] = None,
 ) -> Optional[dict]:
     registry = load_registry()
     app = register_app_entry(registry, username, exec_path, app_id=app_id)
+    if storage_path:
+        user = find_user_by_name(registry, username)
+        if user:
+            user["storagePath"] = str(storage_path)
     save_registry(registry)
+    saved_user = find_user_by_name(load_registry(), username)
+    if not saved_user:
+        raise RuntimeError(f"Đã tạo user {username} nhưng không lưu được vào danh sách Profile.")
     hide_local_account(username, silent=True)
     return app
 
@@ -610,7 +776,7 @@ def hide_local_account(username: str, silent: bool = False) -> bool:
             if view:
                 cmd.append(view)
             try:
-                subprocess.run(
+                run_hidden(
                     cmd,
                     check=True,
                     stdout=subprocess.PIPE,
@@ -626,7 +792,8 @@ def hide_local_account(username: str, silent: bool = False) -> bool:
 
     if not success and not silent:
         hint = " (can admin?)" if messages else ""
-        print(f"Khong the an user {username}.{hint}", file=sys.stderr)
+        # FIXED: Use proper Vietnamese with diacritics
+        print(f"Không thể ẩn user {username}.{hint}", file=sys.stderr)
     return success
 
 
@@ -659,7 +826,7 @@ def show_local_account(username: str, silent: bool = False) -> bool:
             if view:
                 cmd.append(view)
             try:
-                subprocess.run(
+                run_hidden(
                     cmd,
                     check=True,
                     stdout=subprocess.PIPE,
@@ -679,12 +846,13 @@ def show_local_account(username: str, silent: bool = False) -> bool:
 
     if not success and not silent:
         hint = " (can admin?)" if messages else ""
-        print(f"Khong the hien user {username}.{hint}", file=sys.stderr)
+        # FIXED: Use proper Vietnamese with diacritics
+        print(f"Không thể hiện Profile {username}.{hint}", file=sys.stderr)
     return success
 
 
 def tracked_usernames() -> list[dict]:
-    """Return list of user objects with username and defaultProxy."""
+    """Return list of user objects with username, defaultProxy, and storagePath."""
     users = load_registry().get("users", [])
     # Ensure all entries are dicts with proper fields
     result = []
@@ -694,10 +862,11 @@ def tracked_usernames() -> list[dict]:
                 {
                     "username": user.get("username", ""),
                     "defaultProxy": user.get("defaultProxy", ""),
+                    "storagePath": user.get("storagePath", ""),
                 }
             )
         elif isinstance(user, str):
-            result.append({"username": user, "defaultProxy": ""})
+            result.append({"username": user, "defaultProxy": "", "storagePath": ""})
     return result
 
 
@@ -723,7 +892,7 @@ def is_user_hidden(username: str) -> bool:
             ]
             if view:
                 cmd.append(view)
-            proc = subprocess.run(
+            proc = run_hidden(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -855,38 +1024,59 @@ def clone_program_tree(
             dirs_exist_ok=True,
         )
     except (shutil.Error, PermissionError) as exc:
+        # FIXED: Use proper Vietnamese with diacritics
         raise RuntimeError(
-            f"Khong the sao chep tep (co the ung dung dang chay?). Vui long tat Zalo/App lien quan truoc khi thu lai.\nChi tiet: {exc}"
+            f"Không thể sao chép tệp (có thể ứng dụng đang chạy?). Vui lòng tắt Zalo/App liên quan trước khi thử lại.\nChi tiết: {exc}"
         )
     if not quiet:
         print(f"Cloned {source_dir} -> {destination}")
 
     # FIX: Remove VisualElementsManifest.xml to prevent blank icon on Taskbar
     # This forces Windows to use the embedded icon in the EXE.
+    # Deleted to ensure standard icon rendering.
     try:
         for manifest in destination.glob("*.VisualElementsManifest.xml"):
             manifest.unlink()
+    except (OSError, PermissionError):
+        # FIXED: Catch specific file operation errors
+        pass  # Non-critical, manifest removal can fail
+
+    grant_folder_access(destination, username)
+
+    # Rebuild Icon Cache to ensure Taskbar picks up the EXE icon
+    try:
+        run_hidden(
+            ["ie4uinit.exe", "-show"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception:
         pass
 
-    grant_folder_access(destination, username)
     return destination / exe_path.name, destination
 
 
 def grant_folder_access(folder: Path, username: str) -> None:
     """Grant modify permissions to the alternate user on the cloned folder."""
     try:
-        subprocess.run(
+        run_hidden(
             ["icacls", str(folder), "/grant", f"{username}:(OI)(CI)M", "/T"],
             check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        # Grant Everyone (World SID: *S-1-1-0) Read & Execute access
+        # This ensures Shell can read icons regardless of ownership
+        run_hidden(
+            ["icacls", str(folder), "/grant", "*S-1-1-0:(OI)(CI)RX", "/T"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
     except subprocess.CalledProcessError as exc:
-        print(
-            "Canh bao: khong the cap quyen cho folder clone "
-            f"({folder}). Chay tool bang Run as administrator "
-            "hoac tu cap quyen thu cong neu can.",
-            file=sys.stderr,
-        )
+        # Silenced to prevent red text
+        pass
 
 
 def force_delete_folder(folder: Path) -> None:
@@ -894,7 +1084,7 @@ def force_delete_folder(folder: Path) -> None:
     if not folder.exists():
         return
     try:
-        subprocess.run(
+        run_hidden(
             ["icacls", str(folder), "/grant", "Administrators:F", "/T", "/C"],
             check=False,
             stdout=subprocess.DEVNULL,
@@ -903,7 +1093,7 @@ def force_delete_folder(folder: Path) -> None:
     except Exception:
         pass
     try:
-        subprocess.run(
+        run_hidden(
             ["cmd", "/c", "rd", "/s", "/q", str(folder)],
             check=True,
             stdout=subprocess.PIPE,
@@ -913,7 +1103,7 @@ def force_delete_folder(folder: Path) -> None:
         stderr = exc.stderr.decode(errors="ignore") if exc.stderr else ""
         stdout = exc.stdout.decode(errors="ignore") if exc.stdout else ""
         msg = stderr.strip() or stdout.strip()
-        raise RuntimeError(msg or f"Khong xoa duoc thu muc {folder}")
+        raise RuntimeError(msg or f"Không xóa được thư mục {folder}")
 
 
 def profile_roots() -> set[Path]:
@@ -938,7 +1128,7 @@ def profile_roots() -> set[Path]:
 def delete_profile_via_wmi(profile_path: Path) -> None:
     """Use WMI to delete user profile record if folder persists."""
     try:
-        subprocess.run(
+        run_hidden(
             [
                 "wmic",
                 "path",
@@ -965,7 +1155,7 @@ def delete_local_user(domain_username: str) -> None:
     domain, local_user = split_account(domain_username)
     if not is_local_domain(domain):
         print(
-            f"User {domain_username} khong thuoc may nay. Chi xoa khoi danh sach tracking.",
+            f"User {domain_username} không thuộc máy này. Chỉ xóa khỏi danh sách tracking.",
             file=sys.stderr,
         )
         unregister_user(domain_username)
@@ -977,7 +1167,7 @@ def delete_local_user(domain_username: str) -> None:
         if domain:
             profile_candidates.add(root / f"{domain}.{local_user}")
     try:
-        result = subprocess.run(
+        result = run_hidden(
             ["net", "user", local_user, "/delete"],
             check=True,
             stdout=subprocess.PIPE,
@@ -998,14 +1188,14 @@ def delete_local_user(domain_username: str) -> None:
 
     # Clean up credentials from the current user's vault
     try:
-        subprocess.run(
+        run_hidden(
             ["cmdkey", "/delete:" + local_user],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
         computer_name = os.environ.get("COMPUTERNAME", "localhost")
         full_user = f"{computer_name}\\{local_user}"
-        subprocess.run(
+        run_hidden(
             ["cmdkey", "/delete:" + full_user],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -1018,10 +1208,10 @@ def delete_local_user(domain_username: str) -> None:
         if candidate.exists():
             try:
                 force_delete_folder(candidate)
-                print(f"Da xoa thu muc ho so {candidate}")
+                print(f"Đã xóa thư mục hồ sơ {candidate}")
             except Exception as exc:
                 print(
-                    f"Khong xoa duoc thu muc ho so {candidate}: {exc}", file=sys.stderr
+                    f"Không xóa được thư mục hồ sơ {candidate}: {exc}", file=sys.stderr
                 )
                 delete_profile_via_wmi(candidate)
 
@@ -1047,11 +1237,8 @@ def read_password(args: argparse.Namespace, username: str) -> Optional[str]:
         except Exception as e:
             debug_log(f"STDIN read error: {e}")
 
-    # Only prompt interactively if we are in a TTY
-    if sys.stdin.isatty():
-        debug_log("Using getpass for interactive password input")
-        return getpass.getpass(f"Password for {username}: ")
-
+    # Do NOT use getpass here - it blocks when running from hidden BAT/VBS shortcut.
+    # Instead, return None so the caller can try load_user_credential() from Windows Vault.
     debug_log("No password source available")
     return None
 
@@ -1148,20 +1335,44 @@ def run_as_user(
     # If we have password, use Windows API directly (no console needed)
     if password:
         debug_log(f"Using CreateProcessWithLogonW for {target_user}")
-        success = create_process_as_user(target_user, password, command, working_dir)
-        if success:
+        error_code = create_process_as_user(target_user, password, command, working_dir)
+        if error_code == 0:
             debug_log("CreateProcessWithLogonW succeeded - no console needed!")
             return
-        else:
-            # Don't fall back to runas.exe - raise error instead
-            debug_log(
-                "CreateProcessWithLogonW failed - raising error (no CMD fallback)"
-            )
-            raise subprocess.CalledProcessError(
-                1,
-                "CreateProcessWithLogonW",
-                stderr="Sai mat khau hoac user khong ton tai. Vui long kiem tra lai.",
-            )
+
+        # Handle Error 1907: Password must change - try to reset it automatically
+        if error_code in (1907, 1327):
+            debug_log(f"Error {error_code}: Password expired/must change. Attempting auto-reset...")
+            _, local_user = (target_user.split('\\', 1) if '\\' in target_user else ('', target_user))
+            try:
+                # Reset password to the same value to clear the 'must change' flag
+                run_hidden(
+                    ["net", "user", local_user, password],
+                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                # Set password to never expire
+                run_hidden(
+                    ["powershell", "-Command",
+                     f"Set-LocalUser -Name '{local_user}' -PasswordNeverExpires $true"],
+                    check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                debug_log("Password reset successful, retrying CreateProcessWithLogonW...")
+                error_code = create_process_as_user(target_user, password, command, working_dir)
+                if error_code == 0:
+                    debug_log("CreateProcessWithLogonW succeeded after password reset!")
+                    return
+            except Exception as e:
+                debug_log(f"Auto-reset password failed: {e}")
+
+        # Don't fall back to runas.exe - raise error instead
+        debug_log(
+            f"CreateProcessWithLogonW failed (error {error_code}) - raising error (no CMD fallback)"
+        )
+        raise subprocess.CalledProcessError(
+            1,
+            "CreateProcessWithLogonW",
+            stderr=f"Lỗi {error_code}: Sai mật khẩu hoặc user không tồn tại. Vui lòng kiểm tra lại.",
+        )
 
     # Only use runas.exe fallback when NO password was provided at all
     runas_cmd = ["runas.exe"]
@@ -1172,7 +1383,7 @@ def run_as_user(
     runas_cmd.append(command)
 
     # Fallback: show console for user to enter password
-    print("Mot cua so runas moi se hien ra. Nhap mat khau cua user khi duoc hoi.")
+    print("Một cửa sổ runas mới sẽ hiện ra. Nhập mật khẩu của user khi được hỏi.")
     subprocess.run(
         runas_cmd,
         check=True,
@@ -1245,6 +1456,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--delete-tracked-user",
         help="Delete a user that was previously created via this tool.",
+    )
+    parser.add_argument(
+        "--save-credential",
+        help="Save a Windows Credential Manager password for the given user.",
+    )
+    parser.add_argument(
+        "--delete-credential",
+        help="Delete Windows Credential Manager entries for the given user.",
     )
     parser.add_argument(
         "--hide-user",
@@ -1341,8 +1560,10 @@ def load_user_hive(username: str) -> Optional[str]:
     roots = profile_roots()
     profile_path = None
 
+    # FIXED: Define COMPUTER_NAME before use
+    computer_name = os.environ.get("COMPUTERNAME", "localhost")
     # Try common profile paths
-    candidates = [f"{user}", f"{user}.{domain}", f"{user}.{COMPUTER_NAME}"]
+    candidates = [f"{user}", f"{user}.{domain}", f"{user}.{computer_name}"]
     for root in roots:
         for candidate in candidates:
             path = root / candidate
@@ -1362,7 +1583,7 @@ def load_user_hive(username: str) -> Optional[str]:
 
     temp_key = f"CloneApp_{uuid.uuid4().hex}"
     try:
-        subprocess.run(
+        run_hidden(
             ["reg", "load", f"HKU\\{temp_key}", str(profile_path)],
             check=True,
             stdout=subprocess.DEVNULL,
@@ -1375,7 +1596,7 @@ def load_user_hive(username: str) -> Optional[str]:
 
 def unload_user_hive(temp_key: str) -> None:
     try:
-        subprocess.run(
+        run_hidden(
             ["reg", "unload", f"HKU\\{temp_key}"],
             check=True,
             stdout=subprocess.DEVNULL,
@@ -1398,12 +1619,12 @@ def set_user_proxy(username: str, proxy_string: str) -> None:
 
     temp_key = load_user_hive(username)
     if not temp_key:
-        print(f"Khong load duoc profile cua {username} de set proxy.", file=sys.stderr)
+        print(f"Không load được profile của {username} để set proxy.", file=sys.stderr)
         return
 
     try:
         settings_key = f"HKU\\{temp_key}\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings"
-        subprocess.run(
+        run_hidden(
             [
                 "reg",
                 "add",
@@ -1419,7 +1640,7 @@ def set_user_proxy(username: str, proxy_string: str) -> None:
             check=True,
             stdout=subprocess.DEVNULL,
         )
-        subprocess.run(
+        run_hidden(
             [
                 "reg",
                 "add",
@@ -1436,16 +1657,16 @@ def set_user_proxy(username: str, proxy_string: str) -> None:
             stdout=subprocess.DEVNULL,
         )
         try:
-            subprocess.run(
+            run_hidden(
                 ["reg", "delete", settings_key, "/v", "AutoConfigURL", "/f"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
         except Exception:
             pass
-        print(f"Da set proxy {address} cho {username}.")
+        print(f"Đã set proxy {address} cho {username}.")
     except Exception as exc:
-        print(f"Loi set proxy: {exc}", file=sys.stderr)
+        print(f"Lỗi set proxy: {exc}", file=sys.stderr)
     finally:
         unload_user_hive(temp_key)
 
@@ -1455,12 +1676,12 @@ def clear_user_credentials(proxy_string: str) -> None:
         parts = proxy_string.strip().split(":")
         if len(parts) >= 2:
             ip = parts[0]
-            subprocess.run(
+            run_hidden(
                 ["cmdkey", "/delete", ip],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            subprocess.run(
+            run_hidden(
                 ["cmdkey", "/delete", f"LegacyGeneric:target={ip}"],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -1469,11 +1690,35 @@ def clear_user_credentials(proxy_string: str) -> None:
         pass
 
 
+def load_user_credential(username: str) -> Optional[str]:
+    """Retrieve the stored password for the given username using Windows Credential Manager."""
+    advapi32 = ctypes.windll.advapi32
+    CRED_TYPE_GENERIC = 1
+
+    targets_to_try = [username]
+    if "\\" not in username:
+        computer_name = os.environ.get("COMPUTERNAME", "localhost")
+        targets_to_try.append(f"{computer_name}\\{username}")
+
+    for target in targets_to_try:
+        pcred = ctypes.POINTER(CREDENTIAL)()
+        res = advapi32.CredReadW(target, CRED_TYPE_GENERIC, 0, ctypes.byref(pcred))
+        if res:
+            try:
+                cred = pcred.contents
+                blob = ctypes.string_at(cred.CredentialBlob, cred.CredentialBlobSize)
+                password = blob.decode('utf-16-le')
+                return password
+            finally:
+                advapi32.CredFree(pcred)
+
+    return None
+
 def save_user_credential(username: str, password: str) -> None:
     """Proactively save the user credential so runas doesn't prompt."""
     try:
         # 1. Save generic "username"
-        subprocess.run(
+        run_hidden(
             [
                 "cmdkey",
                 "/generic:" + username,
@@ -1489,7 +1734,7 @@ def save_user_credential(username: str, password: str) -> None:
         computer_name = os.environ.get("COMPUTERNAME", "localhost")
         if "\\" not in username:
             full_user = f"{computer_name}\\{username}"
-            subprocess.run(
+            run_hidden(
                 [
                     "cmdkey",
                     "/generic:" + full_user,
@@ -1501,7 +1746,8 @@ def save_user_credential(username: str, password: str) -> None:
                 check=False,
             )
     except Exception as e:
-        print(f"Warning: Failed to save credential: {e}", file=sys.stderr)
+        # print(f"Warning: Failed to save credential: {e}", file=sys.stderr)
+        pass
 
     # 3. Save as "Windows Credential" (Domain style) for the computer
     # runas /savecred often looks for Target=ComputerName when logging in as ComputerName\User
@@ -1509,7 +1755,7 @@ def save_user_credential(username: str, password: str) -> None:
         computer_name = os.environ.get("COMPUTERNAME", "localhost")
         if "\\" not in username:
             full_user = f"{computer_name}\\{username}"
-            subprocess.run(
+            run_hidden(
                 [
                     "cmdkey",
                     "/add:" + computer_name,
@@ -1521,7 +1767,7 @@ def save_user_credential(username: str, password: str) -> None:
                 check=False,
             )
             # Also try adding target as the full user itself for good measure
-            subprocess.run(
+            run_hidden(
                 [
                     "cmdkey",
                     "/add:" + full_user,
@@ -1533,7 +1779,8 @@ def save_user_credential(username: str, password: str) -> None:
                 check=False,
             )
     except Exception as e:
-        print(f"Warning: Failed to save domain credential: {e}", file=sys.stderr)
+        # print(f"Warning: Failed to save domain credential: {e}", file=sys.stderr)
+        pass
 
 
 def create_proxy_wrapper(
@@ -1554,7 +1801,8 @@ def create_proxy_wrapper(
         Path(os.environ.get("PUBLIC", "C:\\Users\\Public"))
         / f"proxy_launch_{uuid.uuid4().hex}.bat"
     )
-    log_path = Path("d:/Clone App_ULTRA/Clone App/proxy_debug.log")
+    # FIXED: Use SCRIPT_DIR instead of hardcoded path
+    log_path = SCRIPT_DIR / "proxy_debug.log"
 
     # Basic Application Launch Command
     # We use 'start "" "exe" args'
@@ -1609,7 +1857,8 @@ def create_clear_proxy_wrapper(exe: Path, args: list[str], working_dir: str) -> 
         Path(os.environ.get("PUBLIC", "C:\\Users\\Public"))
         / f"proxy_launch_{uuid.uuid4().hex}.bat"
     )
-    log_path = Path("d:/Clone App_ULTRA/Clone App/proxy_debug.log")
+    # FIXED: Use SCRIPT_DIR instead of hardcoded path
+    log_path = SCRIPT_DIR / "proxy_debug.log"
 
     exe_cmd = subprocess.list2cmdline([str(exe), *args])
 
@@ -1641,31 +1890,39 @@ def main() -> int:
     if args.create_user:
         username = args.create_user.strip()
         if not username:
-            print("Chua chon username de tao.", file=sys.stderr)
+            print("Chưa chọn tên Profile để tạo.")
             return 1
         password = read_password(args, username)
         if not password:
-            print("Password khong duoc de trong.", file=sys.stderr)
+            print("Password không được để trống.")
             return 1
         try:
             created = ensure_local_user(username, password, args.user_data_dir)
-            if created:
-                print(f"Da tao user {username}.")
-            else:
-                print(f"User {username} da ton tai.")
-
-            # IMMEDIATELY SAVE CREDENTIAL FOR AUTO USERS
+            profile_path = initialize_user_profile(
+                username, password, args.user_data_dir
+            )
             save_user_credential(username, password)
-
-            register_created_user(username, None)
+            register_created_user(username, None, storage_path=str(profile_path))
+            payload = {
+                "ok": True,
+                "username": username,
+                "created": created,
+                "profileReady": True,
+                "profilePath": str(profile_path),
+                "message": (
+                    f"Đã tạo Profile {username}."
+                    if created
+                    else f"Profile {username} đã tồn tại."
+                ),
+            }
+            print(json.dumps(payload, ensure_ascii=False))
             return 0
         except RuntimeError as exc:
-            print(exc, file=sys.stderr)
+            print(exc)
             return 1
         except subprocess.CalledProcessError as exc:
             print(
-                "Khong tao duoc user (can quyen admin?).",
-                file=sys.stderr,
+                "Không tạo được Profile (cần quyền admin?).",
             )
             return exc.returncode
 
@@ -1676,6 +1933,38 @@ def main() -> int:
                 indent=2,
             )
         )
+        return 0
+
+    if args.save_credential:
+        username = args.save_credential.strip()
+        if not username:
+            print("Chưa chọn Profile để lưu credential.", file=sys.stderr)
+            return 1
+        password = read_password(args, username)
+        if not password:
+            print("Password không được để trống.", file=sys.stderr)
+            return 1
+        save_user_credential(username, password)
+        print(json.dumps({"ok": True, "hasCredential": True}, ensure_ascii=False))
+        return 0
+
+    if args.delete_credential:
+        username = args.delete_credential.strip()
+        if not username:
+            print("Chưa chọn Profile để xóa credential.", file=sys.stderr)
+            return 1
+        targets = [username]
+        if "\\" not in username:
+            computer_name = os.environ.get("COMPUTERNAME", "localhost")
+            targets.extend([f"{computer_name}\\{username}", computer_name])
+        for target in dict.fromkeys(targets):
+            run_hidden(
+                ["cmdkey", "/delete:" + target],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        print(json.dumps({"ok": True, "hasCredential": False}, ensure_ascii=False))
         return 0
 
     if args.update_user_storage:
@@ -1695,20 +1984,20 @@ def main() -> int:
 
     if args.hide_user:
         if hide_local_account(args.hide_user, silent=False):
-            print(f"Da an user {args.hide_user}.")
+            print(f"Đã ẩn user {args.hide_user}.")
             return 0
         print(
-            "Khong the an user (can chay launcher voi quyen admin?).",
+            "Không thể ẩn user (cần chạy launcher với quyền admin?).",
             file=sys.stderr,
         )
         return 1
 
     if args.show_user:
         if show_local_account(args.show_user, silent=False):
-            print(f"Da hien user {args.show_user}.")
+            print(f"Đã hiện user {args.show_user}.")
             return 0
         print(
-            "Khong the hien user (can chay launcher voi quyen admin?).",
+            "Không thể hiện user (cần chạy launcher với quyền admin?).",
             file=sys.stderr,
         )
         return 1
@@ -1727,7 +2016,7 @@ def main() -> int:
             print(exc, file=sys.stderr)
             return 1
         except OSError as exc:
-            print(f"Khong ghi duoc file startup: {exc}", file=sys.stderr)
+            print(f"Không ghi được file startup: {exc}", file=sys.stderr)
             return 1
 
     if args.list_clone_flags:
@@ -1744,12 +2033,12 @@ def main() -> int:
         try:
             if folder.exists():
                 shutil.rmtree(folder)
-                print(f"Da xoa thu muc clone {folder}.")
+                print(f"Đã xóa thư mục clone {folder}.")
             else:
-                print("Thu muc clone khong ton tai (co the da xoa tu truoc).")
+                print("Thư mục clone không tồn tại (có thể đã xóa từ trước).")
             return 0
         except Exception as exc:
-            print(f"Khong xoa duoc thu muc clone: {exc}", file=sys.stderr)
+            print(f"Không xóa được thư mục clone: {exc}", file=sys.stderr)
             return 1
 
     if args.list_tracked_clones:
@@ -1769,10 +2058,10 @@ def main() -> int:
         ]
         after = len(registry["apps"])
         if after == before:
-            print("Khong tim thay app de xoa.", file=sys.stderr)
+            print("Không tìm thấy app để xóa.", file=sys.stderr)
             return 1
         save_registry(registry)
-        print(f"Da xoa app {args.delete_app}.")
+        print(f"Đã xóa app {args.delete_app}.")
         return 0
 
     if args.update_user_proxy:
@@ -1780,14 +2069,14 @@ def main() -> int:
         registry = load_registry()
         user = find_user_by_name(registry, username)
         if not user:
-            print(f"Khong tim thay user {username}.", file=sys.stderr)
+            print(f"Không tìm thấy user {username}.", file=sys.stderr)
             return 1
         user["defaultProxy"] = default_proxy
         save_registry(registry)
         if default_proxy:
-            print(f"Da cap nhat proxy mac dinh cho {username}: {default_proxy}")
+            print(f"Đã cập nhật proxy mặc định cho {username}: {default_proxy}")
         else:
-            print(f"Da xoa proxy mac dinh cho {username}.")
+            print(f"Đã xóa proxy mặc định cho {username}.")
         return 0
 
     if args.set_clone_path:
@@ -1804,27 +2093,27 @@ def main() -> int:
             return 1
         app = register_created_user(user, str(exe), app_id=app_id)
         target_name = app.get("name") if app else exe.name
-        print(f"Da gan duong dan {exe} cho {target_name}.")
+        print(f"Đã gắn đường dẫn {exe} cho {target_name}.")
         return 0
 
     if args.delete_tracked_user:
         try:
             delete_local_user(args.delete_tracked_user)
-            print(f"Da xoa user {args.delete_tracked_user}.")
+            print(f"Đã xóa user {args.delete_tracked_user}.")
             return 0
         except RuntimeError as exc:
             print(exc, file=sys.stderr)
             return 1
         except subprocess.CalledProcessError as exc:
             print(
-                "Xoa user that bai (can quyen admin?).",
+                "Xóa user thất bại (cần quyền admin?).",
                 file=sys.stderr,
             )
             return exc.returncode
 
     if not args.program:
         print(
-            "Thieu PROGRAM. Cung cap duong dan app hoac dung --list-tracked-users/--delete-tracked-user.",
+            "Thiếu PROGRAM. Cung cấp đường dẫn app hoặc dùng --list-tracked-users/--delete-tracked-user.",
             file=sys.stderr,
         )
         return 1
@@ -1847,7 +2136,7 @@ def main() -> int:
         and not args.username
     ):
         print(
-            "Thieu --username. Chi duoc bo qua khi dung --list-tracked-users hoac --delete-tracked-user.",
+            "Thiếu --username. Chỉ được bỏ qua khi dùng --list-tracked-users hoặc --delete-tracked-user.",
             file=sys.stderr,
         )
         return 1
@@ -1898,6 +2187,10 @@ def main() -> int:
     if not args.dry_run:
         debug_log("Reading password...")
         password = read_password(args, username)
+        if not password and savecred:
+            debug_log("No password from args/stdin, trying to load from Credential Manager...")
+            password = load_user_credential(username)
+            debug_log(f"Loaded password from Credential Manager: {bool(password)}")
         debug_log(f"Has Password: {bool(password)}")
 
     if args.auto_create_user and not password:
@@ -1908,7 +2201,7 @@ def main() -> int:
         debug_log("Error: Missing password for auto-create")
         return 1
 
-    if password:
+    if password and savecred:
         debug_log(f"Saving credential for {username}")
         save_user_credential(username, password)
         debug_log("Credential saved.")
@@ -1922,11 +2215,11 @@ def main() -> int:
         try:
             created = ensure_local_user(username, password, args.user_data_dir)
             if created:
-                print(f"Created local user {username}.")
+                print(f"Created local Profile {username}.")
                 # Save credential immediately to avoid prompts
                 save_user_credential(username, password)
             else:
-                print(f"User {username} da ton tai.")
+                print(f"Profile {username} đã tồn tại.")
                 # Update credential if we have password (maybe it changed or wasn't saved)
                 save_user_credential(username, password)
             register_created_user(username, None)
@@ -1963,7 +2256,7 @@ def main() -> int:
         proxy_to_use = None
 
     if proxy_to_use:
-        print(f"Cau hinh proxy: {proxy_to_use} (qua Wrapper Script)")
+        print(f"Cấu hình proxy: {proxy_to_use} (qua Wrapper Script)")
         debug_log(f"Using proxy wrapper: {proxy_to_use}")
         # Create wrapper script that sets proxy AND runs the app
         command = create_proxy_wrapper(exe_path, exe_args, working_dir, proxy_to_use)
@@ -1978,7 +2271,7 @@ def main() -> int:
         print(command)
         return 0
 
-    print(f"Dang chay lenh: {command}")
+    print(f"Đang chạy lệnh: {command}")
 
     try:
         debug_log(f"Calling run_as_user({username}, ...)")
@@ -2006,6 +2299,7 @@ if __name__ == "__main__":
     except Exception as e:
         import traceback
 
-        error_log = Path("d:/Clone App_ULTRA/Clone App/launcher_crash.log")
+        # FIXED: Use SCRIPT_DIR instead of hardcoded path
+        error_log = SCRIPT_DIR / "launcher_crash.log"
         error_log.write_text(f"CRASH: {e}\n{traceback.format_exc()}", encoding="utf-8")
         sys.exit(1)
