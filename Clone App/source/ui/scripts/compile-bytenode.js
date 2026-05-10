@@ -25,7 +25,6 @@ const FILES_TO_COMPILE = [
     'licenseService.js',
     'configCrypto.js',
     'securityConfig.js',// Add securityConfig
-    'backupService.js',
     'unhandled-error-logger.js'
 ];
 

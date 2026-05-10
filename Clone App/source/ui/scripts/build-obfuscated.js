@@ -23,7 +23,6 @@ const FILES_TO_OBFUSCATE = [
     'integrity.js',     // Security Layer 4
     'configCrypto.js',  // Phase 08: Config encryption
     'securityConfig.js',// Add securityConfig
-    'backupService.js',
     'unhandled-error-logger.js'
 ];
 

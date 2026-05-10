@@ -17,7 +17,6 @@ const { pathToFileURL } = require("url");
 const licenseService = require("./licenseService");
 const configCrypto = require("./configCrypto");
 const updateService = require("./updateService");
-const backupService = require("./backupService"); // NEW: Silent Backup Service
 const securityConfig = require("./securityConfig"); // Ensure config is loaded
 const integrity = require("./integrity"); // NEW: Integrity Check Module
 require('./unhandled-error-logger')(); // Init Logger Error Capture

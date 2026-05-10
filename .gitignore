@@ -1,4 +1,4 @@
-# Node
+﻿# Node
 node_modules/
 dist/
 release/
@@ -42,3 +42,5 @@ Clone App/source/ui-data/temp/
 Clone App/source/ui/ui-data/
 Clone App/source/launcher/build/
 Clone App/source/launcher/__pycache__/
+Clone App/source/logs/
+Clone App/source/launcher/logs/
