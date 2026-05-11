@@ -998,8 +998,14 @@ function createCloneShortcutFile(clone) {
   const vbsBase = `run-clone-${slug}.vbs`;
   const batPath = path.join(execDir, batBase);
   const vbsPath = path.join(execDir, vbsBase);
-  const python = PYTHON_CMD.includes(" ") ? `"${PYTHON_CMD}"` : PYTHON_CMD;
-  let commandLine = `${python} "${LAUNCHER_SCRIPT}" "${clone.execPath}" --username "${clone.username}"`;
+  let commandLine;
+  if (USE_EXE_LAUNCHER && fs.existsSync(LAUNCHER_EXE)) {
+    const exe = LAUNCHER_EXE.includes(" ") ? `"${LAUNCHER_EXE}"` : LAUNCHER_EXE;
+    commandLine = `${exe} "${clone.execPath}" --username "${clone.username}"`;
+  } else {
+    const python = PYTHON_CMD.includes(" ") ? `"${PYTHON_CMD}"` : PYTHON_CMD;
+    commandLine = `${python} "${LAUNCHER_SCRIPT}" "${clone.execPath}" --username "${clone.username}"`;
+  }
 
   // Dynamic Proxy: Pass config path so launcher reads latest proxy at runtime
   commandLine += ` --config-path "${CLONE_OVERRIDES_FILE}"`;

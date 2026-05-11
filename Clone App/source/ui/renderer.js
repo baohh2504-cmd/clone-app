@@ -1635,7 +1635,7 @@ els.btnCreateSingle?.addEventListener('click', async () => {
     if (username === "NEW_USER") {
       finalUsername = `User_${Date.now()}`;
       // Windows forbids password containing username. Use a fixed strong password.
-      const autoPass = "CloneApp@2026";
+      const autoPass = "12345678";
 
       showLoading("Đang khởi tạo User mới...", "Hệ thống đang tạo user Windows riêng biệt...");
 

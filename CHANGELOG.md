@@ -1,6 +1,14 @@
 # Changelog
 
-## [Unreleased]
+## [0.5.0] - 2026-05-11
+
+### Fixed
+- **Shortcut**: Desktop shortcut now correctly uses compiled `runas_launcher.exe` when available, instead of always calling `python`. Shortcuts work properly in packaged builds.
+- **Auto Profile**: Changed default auto-generated password from hardcoded value to `12345678` for automatic profile creation.
+
+---
+
+## [0.4.0] - 2026-05-10
 
 ### Added
 - **Password Dialog**: New Modern Dark Theme UI for shortcut authentication.
