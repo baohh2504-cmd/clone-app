@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.6.0] - 2026-05-12
+
+### Fixed
+- **Shortcut Unicode**: VBS files now written in UTF-16LE + BOM so Windows Script Host reads Unicode paths (Vietnamese characters) correctly.
+- **Shortcut Batch**: Added `chcp 65001` to BAT files so CMD handles UTF-8 paths properly.
+- **Shortcut Payload**: `displayName` and `name` now passed to shortcut creation, ensuring consistent naming and proper cleanup.
+- **Cleanup**: HTA password dialog files now deleted when removing a clone app.
+
+---
+
 ## [0.5.0] - 2026-05-11
 
 ### Fixed

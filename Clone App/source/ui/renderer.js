@@ -1399,6 +1399,8 @@ if (els.btnAppShortcut) els.btnAppShortcut.onclick = async () => {
       appId: currentSettingsClone.id,
       execPath: currentSettingsClone.exec_path,
       iconPath: currentSettingsClone.icon_path || "",
+      displayName: currentSettingsClone.displayName || currentSettingsClone.name || username,
+      name: currentSettingsClone.name || "",
       proxy: override.proxy || ""
     });
     showStatus("Đã tạo shortcut thành công!", "success");

@@ -1242,6 +1242,7 @@ document.onkeydown = function() {
   const commandLineStdin = commandLine + ` --password-stdin`;
 
   const batContent = `@echo off
+chcp 65001 >nul
 cd /d "${PROJECT_ROOT}"
 
 REM Check for saved credential
@@ -1267,12 +1268,14 @@ echo %PASS%| ${commandLineStdin}
   fs.writeFileSync(batPath, batContent, "utf-8");
 
   // VBS runs the batch file hidden (0 = hidden window)
+  // Must use UTF-16LE + BOM so Windows Script Host reads Unicode paths correctly
   const vbsContent = [
     'Set WshShell = CreateObject("WScript.Shell")',
     `WshShell.Run chr(34) & "${batPath}" & chr(34), 0, False`,
     "Set WshShell = Nothing",
   ].join("\r\n");
-  fs.writeFileSync(vbsPath, vbsContent, "utf-8");
+  const vbsBom = Buffer.concat([Buffer.from([0xFF, 0xFE]), Buffer.from(vbsContent, "utf16le")]);
+  fs.writeFileSync(vbsPath, vbsBom);
 
   const shortcutPath = resolveShortcutPath(displayName);
   const iconCandidates = [
@@ -1983,7 +1986,7 @@ app.whenReady().then(async () => {
               .filter(
                 (f) =>
                   f.toLowerCase().startsWith(`run-clone-${slug}`) &&
-                  (f.toLowerCase().endsWith(".bat") || f.toLowerCase().endsWith(".vbs"))
+                  (f.toLowerCase().endsWith(".bat") || f.toLowerCase().endsWith(".vbs") || f.toLowerCase().endsWith(".hta"))
               )
               .forEach((f) => {
                 try {
