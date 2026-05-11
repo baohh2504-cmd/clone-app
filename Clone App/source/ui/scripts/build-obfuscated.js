@@ -214,8 +214,10 @@ async function build() {
 
         console.log('   🔒 Security: Python source files NOT included');
     } else {
-        console.log('⚠️ Warning: EXE not found at', exeSource);
-        console.log('   Run: cd launcher && pyinstaller --onefile runas_launcher.py');
+        console.error('❌ FATAL: runas_launcher.exe not found at', exeSource);
+        console.error('   Run: cd launcher && pyinstaller --onefile --noconsole runas_launcher.py');
+        console.error('   Or run: npm run build:launcher');
+        process.exit(1);
     }
     console.log('');
 

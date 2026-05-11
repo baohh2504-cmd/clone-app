@@ -1,6 +1,6 @@
 {
   "name": "runas-launcher-ui",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Minimal Electron UI that wraps the Python run-as launcher.",
   "main": "main.js",
   "scripts": {
@@ -9,9 +9,10 @@
     "compile:bytenode": "node scripts/compile-bytenode.js",
     "checksum": "node scripts/generate-checksums.js release",
     "checksum:obfuscated": "node scripts/generate-checksums.js build/release",
-    "pack:win": "electron-packager . \"Clone App\" --platform=win32 --arch=x64 --out dist --overwrite --icon=assets/icon.ico --extra-resource=../launcher",
-    "dist:win": "electron-builder --win nsis --x64",
-    "dist:obfuscated": "npm run obfuscate && npm run compile:bytenode && cd build && npx electron-builder --win nsis --x64"
+    "build:launcher": "cd ../launcher && pyinstaller --onefile --noconsole --noconfirm --clean --specpath build runas_launcher.py",
+    "pack:win": "npm run build:launcher && electron-packager . \"Clone App\" --platform=win32 --arch=x64 --out dist --overwrite --icon=assets/icon.ico --extra-resource=../launcher",
+    "dist:win": "npm run build:launcher && electron-builder --win nsis --x64",
+    "dist:obfuscated": "npm run build:launcher && npm run obfuscate && npm run compile:bytenode && cd build && npx electron-builder --win nsis --x64"
   },
   "keywords": [
     "electron",

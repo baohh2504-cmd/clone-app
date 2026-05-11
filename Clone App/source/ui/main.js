@@ -518,10 +518,9 @@ function createWindow() {
 }
 
 function ensureLauncher() {
-  // Kiểm tra EXE hoặc Python script tồn tại
-  if (USE_EXE_LAUNCHER) {
+  if (app.isPackaged) {
     if (!fs.existsSync(LAUNCHER_EXE)) {
-      throw new Error(`Cannot find launcher EXE at ${LAUNCHER_EXE}`);
+      throw new Error(`Packaged build requires launcher EXE at ${LAUNCHER_EXE}. Run 'npm run build:launcher' first.`);
     }
   } else {
     if (!fs.existsSync(LAUNCHER_SCRIPT)) {

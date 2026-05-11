@@ -6,7 +6,6 @@ import shlex
 import shutil
 import winreg
 import subprocess
-from subprocess import CREATE_NEW_CONSOLE
 import sys
 import textwrap
 import uuid
@@ -22,7 +21,9 @@ from ctypes import wintypes
 # Windows API constants for CreateProcessWithLogonW
 LOGON_WITH_PROFILE = 0x00000001
 CREATE_UNICODE_ENVIRONMENT = 0x00000400
-CREATE_NEW_CONSOLE_FLAG = 0x00000010
+CREATE_NO_WINDOW_FLAG = 0x08000000
+STARTF_USESHOWWINDOW = 0x00000001
+SW_HIDE = 0
 
 # Shell Notification constants
 SHCNE_ASSOCCHANGED = 0x08000000
@@ -30,26 +31,27 @@ SHCNF_IDLIST = 0x0000
 
 # Timeout constants (in milliseconds)
 DEFAULT_COMMAND_TIMEOUT_MS = 120000  # 2 minutes
-MAX_COMMAND_TIMEOUT_MS = 600000      # 10 minutes
+MAX_COMMAND_TIMEOUT_MS = 600000  # 10 minutes
 DEBUG_LOG_ENABLED = os.environ.get("CLONE_APP_DEBUG") == "1"
 
 
 # Windows Credential API structures
 class CREDENTIAL(ctypes.Structure):
     _fields_ = [
-        ('Flags', wintypes.DWORD),
-        ('Type', wintypes.DWORD),
-        ('TargetName', wintypes.LPWSTR),
-        ('Comment', wintypes.LPWSTR),
-        ('LastWritten', wintypes.FILETIME),
-        ('CredentialBlobSize', wintypes.DWORD),
-        ('CredentialBlob', ctypes.POINTER(ctypes.c_byte)),
-        ('Persist', wintypes.DWORD),
-        ('AttributeCount', wintypes.DWORD),
-        ('Attributes', ctypes.c_void_p),
-        ('TargetAlias', wintypes.LPWSTR),
-        ('UserName', wintypes.LPWSTR),
+        ("Flags", wintypes.DWORD),
+        ("Type", wintypes.DWORD),
+        ("TargetName", wintypes.LPWSTR),
+        ("Comment", wintypes.LPWSTR),
+        ("LastWritten", wintypes.FILETIME),
+        ("CredentialBlobSize", wintypes.DWORD),
+        ("CredentialBlob", ctypes.POINTER(ctypes.c_byte)),
+        ("Persist", wintypes.DWORD),
+        ("AttributeCount", wintypes.DWORD),
+        ("Attributes", ctypes.c_void_p),
+        ("TargetAlias", wintypes.LPWSTR),
+        ("UserName", wintypes.LPWSTR),
     ]
+
 
 # STARTUPINFO structure
 class STARTUPINFOW(ctypes.Structure):
@@ -108,7 +110,8 @@ def create_process_as_user(
         # Initialize structures
         startup_info = STARTUPINFOW()
         startup_info.cb = ctypes.sizeof(STARTUPINFOW)
-        startup_info.dwFlags = 0
+        startup_info.dwFlags = STARTF_USESHOWWINDOW
+        startup_info.wShowWindow = SW_HIDE
 
         process_info = PROCESS_INFORMATION()
 
@@ -123,7 +126,7 @@ def create_process_as_user(
             LOGON_WITH_PROFILE,  # dwLogonFlags
             None,  # lpApplicationName
             command,  # lpCommandLine
-            CREATE_NEW_CONSOLE_FLAG,  # dwCreationFlags
+            CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW_FLAG,  # dwCreationFlags
             None,  # lpEnvironment
             working_dir,  # lpCurrentDirectory
             ctypes.byref(startup_info),  # lpStartupInfo
@@ -561,16 +564,29 @@ def create_local_user(
     # Try PowerShell first (modern), fallback to wmic (legacy)
     try:
         run_hidden(
-            ["powershell", "-Command",
-             f"Set-LocalUser -Name '{local_username}' -PasswordNeverExpires $true"],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            [
+                "powershell",
+                "-Command",
+                f"Set-LocalUser -Name '{local_username}' -PasswordNeverExpires $true",
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
     except (subprocess.CalledProcessError, FileNotFoundError):
         try:
             run_hidden(
-                ["wmic", "useraccount", "where", f"name='{local_username}'",
-                 "set", "PasswordExpires=False"],
-                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                [
+                    "wmic",
+                    "useraccount",
+                    "where",
+                    f"name='{local_username}'",
+                    "set",
+                    "PasswordExpires=False",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
         except FileNotFoundError:
             pass  # wmic not available on some systems
@@ -676,7 +692,9 @@ def initialize_user_profile(
             return target
         time.sleep(0.5)
 
-    raise RuntimeError(f"Đã tạo user nhưng Windows chưa tạo thư mục profile tại {target}.")
+    raise RuntimeError(
+        f"Đã tạo user nhưng Windows chưa tạo thư mục profile tại {target}."
+    )
 
 
 def ensure_local_user(
@@ -716,7 +734,9 @@ def register_created_user(
     save_registry(registry)
     saved_user = find_user_by_name(load_registry(), username)
     if not saved_user:
-        raise RuntimeError(f"Đã tạo user {username} nhưng không lưu được vào danh sách Profile.")
+        raise RuntimeError(
+            f"Đã tạo user {username} nhưng không lưu được vào danh sách Profile."
+        )
     hide_local_account(username, silent=True)
     return app
 
@@ -916,7 +936,7 @@ def write_startup_script(app: dict) -> None:
     body = textwrap.dedent(
         f"""@echo off
 cd /d "{SCRIPT_DIR}"
-{python_cmd} "{SCRIPT_DIR / 'runas_launcher.py'}" "{exec_path}" --username "{username}"
+{python_cmd} "{SCRIPT_DIR / "runas_launcher.py"}" "{exec_path}" --username "{username}"
 """
     )
     script_path.write_text(body, encoding="utf-8")
@@ -1268,8 +1288,7 @@ def resolve_executable(program_path: str, exe_name: Optional[str]) -> Path:
         return exe_files[0]
 
     raise FileNotFoundError(
-        f"Could not find any executable inside {path}. "
-        "Specify --exe-name explicitly."
+        f"Could not find any executable inside {path}. Specify --exe-name explicitly."
     )
 
 
@@ -1342,22 +1361,37 @@ def run_as_user(
 
         # Handle Error 1907: Password must change - try to reset it automatically
         if error_code in (1907, 1327):
-            debug_log(f"Error {error_code}: Password expired/must change. Attempting auto-reset...")
-            _, local_user = (target_user.split('\\', 1) if '\\' in target_user else ('', target_user))
+            debug_log(
+                f"Error {error_code}: Password expired/must change. Attempting auto-reset..."
+            )
+            _, local_user = (
+                target_user.split("\\", 1) if "\\" in target_user else ("", target_user)
+            )
             try:
                 # Reset password to the same value to clear the 'must change' flag
                 run_hidden(
                     ["net", "user", local_user, password],
-                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
                 # Set password to never expire
                 run_hidden(
-                    ["powershell", "-Command",
-                     f"Set-LocalUser -Name '{local_user}' -PasswordNeverExpires $true"],
-                    check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    [
+                        "powershell",
+                        "-Command",
+                        f"Set-LocalUser -Name '{local_user}' -PasswordNeverExpires $true",
+                    ],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
-                debug_log("Password reset successful, retrying CreateProcessWithLogonW...")
-                error_code = create_process_as_user(target_user, password, command, working_dir)
+                debug_log(
+                    "Password reset successful, retrying CreateProcessWithLogonW..."
+                )
+                error_code = create_process_as_user(
+                    target_user, password, command, working_dir
+                )
                 if error_code == 0:
                     debug_log("CreateProcessWithLogonW succeeded after password reset!")
                     return
@@ -1374,20 +1408,10 @@ def run_as_user(
             stderr=f"Lỗi {error_code}: Sai mật khẩu hoặc user không tồn tại. Vui lòng kiểm tra lại.",
         )
 
-    # Only use runas.exe fallback when NO password was provided at all
-    runas_cmd = ["runas.exe"]
-    if save_cred:
-        runas_cmd.append("/savecred")
-
-    runas_cmd.append(f"/user:{target_user}")
-    runas_cmd.append(command)
-
-    # Fallback: show console for user to enter password
-    print("Một cửa sổ runas mới sẽ hiện ra. Nhập mật khẩu của user khi được hỏi.")
-    subprocess.run(
-        runas_cmd,
-        check=True,
-        creationflags=subprocess.CREATE_NEW_CONSOLE,
+    raise subprocess.CalledProcessError(
+        1,
+        "run_as_user",
+        stderr="Thiếu password hoặc credential để chạy app mà không mở CMD.",
     )
 
 
@@ -1707,12 +1731,13 @@ def load_user_credential(username: str) -> Optional[str]:
             try:
                 cred = pcred.contents
                 blob = ctypes.string_at(cred.CredentialBlob, cred.CredentialBlobSize)
-                password = blob.decode('utf-16-le')
+                password = blob.decode("utf-16-le")
                 return password
             finally:
                 advapi32.CredFree(pcred)
 
     return None
+
 
 def save_user_credential(username: str, password: str) -> None:
     """Proactively save the user credential so runas doesn't prompt."""
@@ -2188,7 +2213,9 @@ def main() -> int:
         debug_log("Reading password...")
         password = read_password(args, username)
         if not password and savecred:
-            debug_log("No password from args/stdin, trying to load from Credential Manager...")
+            debug_log(
+                "No password from args/stdin, trying to load from Credential Manager..."
+            )
             password = load_user_credential(username)
             debug_log(f"Loaded password from Credential Manager: {bool(password)}")
         debug_log(f"Has Password: {bool(password)}")
