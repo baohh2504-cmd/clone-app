@@ -751,6 +751,7 @@ function initAutoFillListeners() {
     const storageInput = els.singleCloneTarget; // This is 'single-clone-target' in Add Single View
 
     if (!storageInput) return;
+    if (storageInput.dataset.manualStorage === "1") return;
 
     // Reset logic if "NEW_USER" or empty
     if (!val || val === "NEW_USER") {
@@ -1504,7 +1505,10 @@ function resetAddSingleForm() {
   if (els.singleUsername) els.singleUsername.value = '';
   if (els.singleProgramPath) els.singleProgramPath.value = '';
   if (els.singleExeName) els.singleExeName.innerHTML = '<option value="">-- Chọn hoặc nhập tên file --</option>';
-  if (els.singleCloneTarget) els.singleCloneTarget.value = '';
+  if (els.singleCloneTarget) {
+    els.singleCloneTarget.dataset.manualStorage = "";
+    els.singleCloneTarget.value = globalAppSettings.cloneRoot || '';
+  }
   if (els.singleCloneName) els.singleCloneName.value = '';
   if (els.singleProxy) els.singleProxy.value = '';
   if (els.singleUserDataPath) els.singleUserDataPath.value = '';
@@ -1545,7 +1549,7 @@ els.singleUsername?.addEventListener('change', () => {
 
   // Auto-fill storagePath from profile
   const userObj = trackedUserObjects.find(u => u.username === val);
-  if (userObj && userObj.storagePath && els.singleCloneTarget) {
+  if (userObj && userObj.storagePath && els.singleCloneTarget && els.singleCloneTarget.dataset.manualStorage !== "1") {
     els.singleCloneTarget.value = userObj.storagePath;
   }
 
@@ -1591,8 +1595,8 @@ els.btnCreateSingle?.addEventListener('click', async () => {
   const selectedGroup = els.singleGroupSelect?.value || "";
   const selectedGroups = selectedGroup ? [selectedGroup] : [];
 
-  if (!username || !programPath || !cloneName || !exeName) {
-    showStatus("Vui lòng điền đủ thông tin (User, Path, Tên Clone, Tên file .exe)", "error");
+  if (!username || !programPath || !cloneName || !exeName || !cloneTarget) {
+    showStatus("Vui lòng điền đủ thông tin (User, Path, Thư mục clone, Tên Clone, Tên file .exe)", "error");
     return;
   }
 
@@ -1771,6 +1775,9 @@ els.btnBrowseFolder?.addEventListener('click', async () => {
   const folder = await window.launcherAPI.selectFolder();
   if (folder) {
     els.singleCloneTarget.value = folder;
+    els.singleCloneTarget.dataset.manualStorage = "1";
+    globalAppSettings.cloneRoot = folder;
+    await window.launcherAPI.updateAppSettings({ cloneRoot: folder });
   }
 });
 

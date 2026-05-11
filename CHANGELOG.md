@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0] - 2026-05-12
+
+### Fixed
+- **Clone folder validation**: Added frontend validation for clone target directory before sending to backend.
+- **Clone folder persistence**: Browse folder button now saves selected directory to settings so it persists across sessions.
+- **Clone folder reset**: Reset form now pre-fills clone target from saved settings instead of clearing it.
+- **Profile switch override**: Switching profiles no longer overwrites a manually selected clone folder.
+- **Shortcut payload**: Added `displayName` and `name` to shortcut creation payload for consistent naming and cleanup.
+
+---
+
 ## [0.6.0] - 2026-05-12
 
 ### Fixed
