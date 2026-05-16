@@ -116,8 +116,10 @@ function findInstallerAsset(release, config) {
 
 function findChecksumAsset(release) {
   const assets = Array.isArray(release?.assets) ? release.assets : [];
+  // Try common naming conventions in order of specificity
   return assets.find((asset) => /^checksums\.txt$/i.test(asset?.name || "")) ||
-    assets.find((asset) => /checksum/i.test(asset?.name || "") && /\.txt$/i.test(asset?.name || ""));
+    assets.find((asset) => /^sha256sums(\.txt)?$/i.test(asset?.name || "")) ||
+    assets.find((asset) => /(checksum|sha256)/i.test(asset?.name || "") && /\.txt$/i.test(asset?.name || ""));
 }
 
 function validateExternalUrl(rawUrl, config = DEFAULT_CONFIG) {

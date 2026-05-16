@@ -64,8 +64,8 @@ jobs:
         shell: bash
         working-directory: 'Clone App/source/ui/release'
         run: |
-          sha256sum CloneApp-Setup-*.exe > SHA256SUMS.txt
-          cat SHA256SUMS.txt
+          sha256sum CloneApp-Setup-*.exe > checksums.txt
+          cat checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
@@ -74,7 +74,7 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             Clone App/source/ui/release/CloneApp-Setup-*.exe
-            Clone App/source/ui/release/SHA256SUMS.txt
+            Clone App/source/ui/release/checksums.txt
           body: |
             ## Clone App Release
 
@@ -87,7 +87,7 @@ jobs:
             certutil -hashfile CloneApp-Setup-${{ github.ref_name }}.exe SHA256
             ```
 
-            Compare with the value in `SHA256SUMS.txt`.
+            Compare with the value in `checksums.txt`.
 
             ### Build provenance
 
