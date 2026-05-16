@@ -57,17 +57,8 @@ const launcherAPI = {
     ipcRenderer.invoke("update-user-storage-path", { username, storagePath }),
 };
 
-// === LICENSE API ===
-const licenseAPI = {
-  verify: () => ipcRenderer.invoke("license:verify"),
-  getStatus: () => ipcRenderer.invoke("license:getStatus"),
-};
-
 // === SECURITY: Object.freeze để chống sửa đổi từ Console ===
-// Kẻ gian không thể mở DevTools và gõ: launcherAPI.launchClone = () => {...}
 Object.freeze(launcherAPI);
-Object.freeze(licenseAPI);
 
 // Expose frozen APIs to renderer
 contextBridge.exposeInMainWorld("launcherAPI", launcherAPI);
-contextBridge.exposeInMainWorld("licenseAPI", licenseAPI);

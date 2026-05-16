@@ -14,11 +14,8 @@ const { spawn, execSync, execFileSync } = require("child_process");
 const path = require("path");
 const os = require("os");
 const { pathToFileURL } = require("url");
-const licenseService = require("./licenseService");
 const configCrypto = require("./configCrypto");
 const updateService = require("./updateService");
-const securityConfig = require("./securityConfig"); // Ensure config is loaded
-const integrity = require("./integrity"); // NEW: Integrity Check Module
 require('./unhandled-error-logger')(); // Init Logger Error Capture
 
 const PROJECT_ROOT = path.resolve(__dirname, "..");
@@ -27,8 +24,9 @@ const PROJECT_ROOT = path.resolve(__dirname, "..");
 const LAUNCHER_EXE = path.join(PROJECT_ROOT, "launcher", "dist", "runas_launcher.exe");
 const LAUNCHER_PY = path.join(PROJECT_ROOT, "launcher", "runas_launcher.py");
 const FORCE_EXE_LAUNCHER = process.env.USE_EXE_LAUNCHER === "1";
-const USE_EXE_LAUNCHER = (app.isPackaged || FORCE_EXE_LAUNCHER) && fs.existsSync(LAUNCHER_EXE);
-const LAUNCHER_CMD = USE_EXE_LAUNCHER ? LAUNCHER_EXE : null;
+function useExeLauncher() {
+  return (app.isPackaged || FORCE_EXE_LAUNCHER) && fs.existsSync(LAUNCHER_EXE);
+}
 const LAUNCHER_SCRIPT = LAUNCHER_PY; // Giữ cho backward compatibility
 
 // Config path (encrypted in %APPDATA%, legacy in launcher folder)
@@ -78,7 +76,7 @@ function redactCommandArgs(args = []) {
 const APP_ICON_PATH = resolveAssetPath("assets", "icon.ico");
 const PYTHON_CMD = process.env.PYTHON_CMD || "python";
 // Log launcher mode at startup - Only for dev debugging
-// console.log(`[Launcher] Mode: ${USE_EXE_LAUNCHER ? 'EXE (Compiled)' : 'Python (Dev)'}`);
+// console.log(`[Launcher] Mode: ${useExeLauncher() ? 'EXE (Compiled)' : 'Python (Dev)'}`);
 const DEFAULT_APP_SETTINGS = {
   autoLaunch: false,
   launchMode: "window",
@@ -814,61 +812,16 @@ function queryRunningByUser(targets = []) {
 function runLauncher(payload) {
   return new Promise(async (resolve) => {
     // === Launch Config (local full-access mode) ===
-    // Packaged builds resolve launcher config through the compatibility layer
-    if (app.isPackaged) {
-      try {
-        const configResult = await licenseService.fetchLaunchConfig('zalo');
-
-        if (configResult.success && configResult.config && configResult.config.is_bypass) {
-          console.log('[Launch Config] Local config active');
-        } else if (!configResult.success) {
-          if (configResult.kill) {
-            const { dialog, app: electronApp } = require('electron');
-            dialog.showMessageBoxSync({
-              type: 'error',
-              title: 'Launch Config Error',
-              message: configResult.error || 'Không thể chuẩn bị cấu hình chạy ứng dụng.',
-              buttons: ['OK']
-            });
-            electronApp.exit(1);
-          }
-
-          resolve({
-            ok: false,
-            message: configResult.error || 'Không thể chuẩn bị cấu hình chạy ứng dụng.',
-            stdout: '',
-            stderr: '',
-            exitCode: -1
-          });
-          return;
-        }
-
-        if (!configResult.offline) {
-          console.log('[Launch Config] Config version:', configResult.config.version);
-        }
-      } catch (sslError) {
-        console.error('[Launch Config] Error:', sslError.message);
-        resolve({
-          ok: false,
-          message: 'Lỗi chuẩn bị cấu hình chạy ứng dụng: ' + sslError.message,
-          stdout: '',
-          stderr: '',
-          exitCode: -1
-        });
-        return;
-      }
-    }
-
     // DEBUG: Trace execution
     const debugLog = path.join(PROJECT_ROOT, "launcher_exec.log");
     // EXE mode: args trực tiếp, Python mode: script + args
     const baseArgs = [payload.programPath, "--username", payload.username];
-    const args = USE_EXE_LAUNCHER ? baseArgs : [LAUNCHER_SCRIPT, ...baseArgs];
-    const cmd = USE_EXE_LAUNCHER ? LAUNCHER_EXE : PYTHON_CMD;
+    const args = useExeLauncher() ? baseArgs : [LAUNCHER_SCRIPT, ...baseArgs];
+    const cmd = useExeLauncher() ? LAUNCHER_EXE : PYTHON_CMD;
 
     if (DEBUG_LOG_ENABLED) {
       try {
-        fs.appendFileSync(debugLog, `\n\n[${new Date().toISOString()}] Attempting to launch:\nMODE: ${USE_EXE_LAUNCHER ? 'EXE' : 'Python'}\nCMD: ${cmd}\n`);
+        fs.appendFileSync(debugLog, `\n\n[${new Date().toISOString()}] Attempting to launch:\nMODE: ${useExeLauncher() ? 'EXE' : 'Python'}\nCMD: ${cmd}\n`);
       } catch (e) { }
     }
 
@@ -999,7 +952,7 @@ function createCloneShortcutFile(clone) {
   const batPath = path.join(execDir, batBase);
   const vbsPath = path.join(execDir, vbsBase);
   let commandLine;
-  if (USE_EXE_LAUNCHER && fs.existsSync(LAUNCHER_EXE)) {
+  if (useExeLauncher() && fs.existsSync(LAUNCHER_EXE)) {
     const exe = LAUNCHER_EXE.includes(" ") ? `"${LAUNCHER_EXE}"` : LAUNCHER_EXE;
     commandLine = `${exe} "${clone.execPath}" --username "${clone.username}"`;
   } else {
@@ -1300,8 +1253,8 @@ echo %PASS%| ${commandLineStdin}
 function runPythonUtility(extraArgs) {
   return new Promise((resolve) => {
     // EXE mode: gọi EXE trực tiếp, Python mode: python script
-    const cmd = USE_EXE_LAUNCHER ? LAUNCHER_EXE : PYTHON_CMD;
-    const args = USE_EXE_LAUNCHER ? extraArgs : [LAUNCHER_SCRIPT, ...extraArgs];
+    const cmd = useExeLauncher() ? LAUNCHER_EXE : PYTHON_CMD;
+    const args = useExeLauncher() ? extraArgs : [LAUNCHER_SCRIPT, ...extraArgs];
 
     // DEBUG LOGGING
     const utilLog = path.join(PROJECT_ROOT, "launcher_utility.log");
@@ -1363,8 +1316,8 @@ function runPythonUtility(extraArgs) {
 
 function runPythonUtilityWithInput(extraArgs, inputText = "") {
   return new Promise((resolve) => {
-    const cmd = USE_EXE_LAUNCHER ? LAUNCHER_EXE : PYTHON_CMD;
-    const args = USE_EXE_LAUNCHER ? extraArgs : [LAUNCHER_SCRIPT, ...extraArgs];
+    const cmd = useExeLauncher() ? LAUNCHER_EXE : PYTHON_CMD;
+    const args = useExeLauncher() ? extraArgs : [LAUNCHER_SCRIPT, ...extraArgs];
     const child = spawn(cmd, args, {
       cwd: PROJECT_ROOT,
       windowsHide: true,
@@ -1407,47 +1360,12 @@ function runPythonUtilityWithInput(extraArgs, inputText = "") {
 }
 
 app.whenReady().then(async () => {
-  // === PHASE 11: INTEGRITY CHECK (ANTI-TAMPER) ===
-  // Kiểm tra xem file securityConfig.js có bị sửa đổi để tắt Nuclear Mode không
-  if (app.isPackaged && securityConfig.shouldRun("ENABLE_NUCLEAR_MODE")) {
-    const isSecure = integrity.checkSecurityConfig(__dirname);
-    if (!isSecure) {
-      console.error('🚨 SECURITY BREACH DETECTED: Config Tampered');
-      // Silent crash - Don't explain why
-      app.exit(1);
-      return;
-    }
-  }
-
   try {
     ensureLauncher();
   } catch (error) {
     dialog.showErrorBox("Thiếu file launcher", error.message);
     app.exit(1);
     return;
-  }
-
-  // Security Layer 4: Kiểm tra File Integrity (chỉ trong packaged build)
-  if (app.isPackaged) {
-    try {
-      const result = integrity.verifyIntegrity(__dirname);
-
-      if (!result.valid && !result.skipped) {
-        console.error('[Security] File integrity check FAILED:', result.tamperedFiles);
-
-        dialog.showMessageBoxSync({
-          type: 'error',
-          title: 'Lỗi bảo mật',
-          message: 'Phát hiện file ứng dụng bị sửa đổi trái phép.\n\nỨng dụng sẽ đóng để bảo vệ phiên chạy hiện tại.',
-          buttons: ['Đóng']
-        });
-        app.exit(1);
-        return;
-      }
-    } catch (integrityError) {
-      console.error('[Security] Integrity check error:', integrityError.message);
-      // Không block app nếu lỗi đọc file
-    }
   }
 
   ipcMain.handle("select-program", handleSelectProgram);
@@ -2200,15 +2118,6 @@ app.whenReady().then(async () => {
       console.warn("[check-clone-status] failed:", error);
     }
     return { ok: true, statuses: response };
-  });
-
-  // === LICENSE HANDLERS ===
-  ipcMain.handle("license:verify", async () => {
-    return await licenseService.verifyLicense();
-  });
-
-  ipcMain.handle("license:getStatus", async () => {
-    return licenseService.getLicenseStatus();
   });
 
   applyAutoLaunchSetting();

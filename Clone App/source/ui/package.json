@@ -1,18 +1,14 @@
 {
   "name": "runas-launcher-ui",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "description": "Minimal Electron UI that wraps the Python run-as launcher.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "obfuscate": "node scripts/build-obfuscated.js",
-    "compile:bytenode": "node scripts/compile-bytenode.js",
     "checksum": "node scripts/generate-checksums.js release",
-    "checksum:obfuscated": "node scripts/generate-checksums.js build/release",
     "build:launcher": "cd ../launcher && pyinstaller --onefile --noconsole --noconfirm --clean --specpath build runas_launcher.py",
     "pack:win": "npm run build:launcher && electron-packager . \"Clone App\" --platform=win32 --arch=x64 --out dist --overwrite --icon=assets/icon.ico --extra-resource=../launcher",
-    "dist:win": "npm run build:launcher && electron-builder --win nsis --x64",
-    "dist:obfuscated": "npm run build:launcher && npm run obfuscate && npm run compile:bytenode && cd build && npx electron-builder --win nsis --x64"
+    "dist:win": "npm run build:launcher && electron-builder --win nsis --x64"
   },
   "keywords": [
     "electron",
@@ -22,14 +18,11 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "dependencies": {
-    "bytenode": "^1.5.7"
-  },
+  "dependencies": {},
   "devDependencies": {
     "electron": "^34.1.1",
     "electron-builder": "^26.0.12",
-    "electron-packager": "^17.1.2",
-    "javascript-obfuscator": "^5.2.1"
+    "electron-packager": "^17.1.2"
   },
   "build": {
     "appId": "com.runclone.app",
@@ -40,7 +33,6 @@
     },
     "files": [
       "**/*",
-      "!antiVM.js",
       "!dist/**",
       "!release/**",
       "!resources/extracted_app/**",
@@ -54,8 +46,6 @@
       "!.cache/**"
     ],
     "asarUnpack": [
-      "**/*.jsc",
-      "**/integrity.json",
       "**/preload.js",
       "**/renderer.js"
     ],

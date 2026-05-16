@@ -294,7 +294,7 @@
 
             <!-- Create New Card (Always Last) -->
             <button id="btn-create-new-card"
-              class="group flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-white/10 dark:border-white/10 bg-white/5 backdrop-blur-sm p-5 hover:border-neon-blue hover:bg-white/10 hover:shadow-[0_0_15px_-3px_rgba(0,240,255,0.3)] transition-all duration-300 cursor-pointer min-h-[140px] aspect-[3/2]">
+              class="group flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-white/10 dark:border-white/10 bg-white/5 backdrop-blur-sm p-5 hover:border-neon-blue hover:bg-white/10 hover:shadow-[0_0_15px_-3px_rgba(0,240,255,0.3)] transition-all duration-300 cursor-pointer min-h-[140px] aspect-square">
               <div
                 class="size-14 rounded-full bg-white/5 group-hover:bg-neon-blue group-hover:text-black text-slate-400 dark:text-[#92a4c9] flex items-center justify-center transition-colors shadow-inner border border-white/5">
                 <span class="material-symbols-outlined text-[28px]">add</span>
@@ -867,12 +867,6 @@
               </p>
             </div>
           </div>
-          <div class="flex items-center gap-4">
-            <button class="relative size-10 rounded-full overflow-hidden border border-slate-200 dark:border-[#232f48]">
-              <img alt="User" class="object-cover w-full h-full"
-                src="https://ui-avatars.com/api/?name=Admin&background=random" />
-            </button>
-          </div>
         </header>
 
         <div class="flex-1 overflow-y-auto p-8 hide-scrollbar">
@@ -1035,54 +1029,6 @@
         <div class="flex-1 overflow-y-auto p-8">
           <div class="glass-panel rounded-xl max-w-4xl mx-auto p-8 space-y-8">
 
-            <!-- License Status Section -->
-            <div class="space-y-4">
-              <div class="flex items-center gap-2 mb-4">
-                <span class="material-symbols-outlined text-neon-blue">verified</span>
-                <h3 class="text-base font-bold text-slate-900 dark:text-white">Trạng thái truy cập</h3>
-              </div>
-
-              <!-- Current Tier Badge -->
-              <div class="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-                <div class="flex items-center gap-3">
-                  <div id="license-tier-icon"
-                    class="size-12 rounded-full bg-slate-700 flex items-center justify-center">
-                    <span class="material-symbols-outlined text-[24px] text-slate-400">person</span>
-                  </div>
-                  <div>
-                    <p class="text-xs text-slate-500 uppercase tracking-wider">Trạng thái</p>
-                    <p id="license-tier-name" class="text-xl font-bold text-white">Toàn quyền</p>
-                  </div>
-                </div>
-                <div id="license-tier-badge"
-                  class="px-4 py-2 rounded-full bg-slate-700 text-slate-300 text-sm font-bold">
-                  Đã mở khóa
-                </div>
-              </div>
-
-              <!-- License Expiry (hidden for Free tier) -->
-              <div id="license-expiry-row"
-                class="hidden flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-                <div class="flex items-center gap-3">
-                  <span class="material-symbols-outlined text-amber-500">schedule</span>
-                  <span class="text-sm text-slate-300">Ngày hết hạn</span>
-                </div>
-                <span id="license-expiry-date" class="text-sm font-bold text-white">--/--/----</span>
-              </div>
-
-              <!-- Clone Usage -->
-              <div class="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-                <div class="flex items-center gap-3">
-                  <span class="material-symbols-outlined text-neon-purple">content_copy</span>
-                  <span class="text-sm text-slate-300">Số Clone đang dùng</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span id="license-clone-used" class="text-lg font-bold text-white">0</span>
-                  <span class="text-slate-500">/</span>
-                  <span id="license-clone-limit" class="text-lg font-bold text-neon-blue">∞</span>
-                </div>
-              </div>
-            </div>
 
             <div
               class="rounded-xl border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-[#111722]/70 p-5 space-y-4">

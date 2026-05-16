@@ -104,15 +104,8 @@ const els = {
   passwordModalCancel: document.getElementById('password-modal-cancel'),
   passwordModalConfirm: document.getElementById('password-modal-confirm'),
 
-  // Account / License Elements
+  // Account Elements
   btnBackFromAccount: document.getElementById('btn-back-from-account'),
-  licenseTierIcon: document.getElementById('license-tier-icon'),
-  licenseTierName: document.getElementById('license-tier-name'),
-  licenseTierBadge: document.getElementById('license-tier-badge'),
-  licenseExpiryRow: document.getElementById('license-expiry-row'),
-  licenseExpiryDate: document.getElementById('license-expiry-date'),
-  licenseCloneUsed: document.getElementById('license-clone-used'),
-  licenseCloneLimit: document.getElementById('license-clone-limit'),
   donateCard: document.getElementById('donate-card'),
   btnCopyDonateAccount: document.getElementById('btn-copy-donate-account'),
   btnCopyDonateMessage: document.getElementById('btn-copy-donate-message'),
@@ -179,14 +172,6 @@ const SOCIAL_LINKS = {
   zalo: 'https://zalo.me/0385253882',
   facebook: 'https://www.facebook.com/hohuybao',
   website: 'https://toolchat.id.vn'
-};
-let licenseState = {
-  activated: true,
-  valid: true,
-  tier: 'free',
-  tierName: 'Toàn quyền',
-  limits: { maxClones: Infinity, batchCreate: true, name: 'Toàn quyền' },
-  features: { batch: true, proxy: true }
 };
 
 let credentialPresence = {};
@@ -930,7 +915,7 @@ function createCloneCardElement(clone) {
 
   const div = document.createElement('div');
   // Card Style: Match 'Create New' button (Glass bg, visible border), Hover Neon Blue
-  div.className = `group relative flex flex-col gap-3 rounded-xl bg-white/5 backdrop-blur-sm p-4 border border-white/10 transition-all duration-300 aspect-[3/2] ${neonBorder} hover:shadow-[0_0_15px_-3px_rgba(0,240,255,0.4)] hover:bg-white/10`;
+  div.className = `group relative flex flex-col gap-3 rounded-xl bg-white/5 backdrop-blur-sm p-4 border border-white/10 transition-all duration-300 aspect-square ${neonBorder} hover:shadow-[0_0_15px_-3px_rgba(0,240,255,0.4)] hover:bg-white/10`;
 
   // Custom hover shadow for neon glow could be added via style if tailwind dynamic class fails
   // div.style.boxShadow = ...
@@ -1586,11 +1571,6 @@ els.btnCreateSingle?.addEventListener('click', async () => {
   const proxy = els.singleProxy.value;
   const force = els.singleForceClone.checked;
 
-  if (proxy && !licenseState?.features?.proxy) {
-    showStatus("Proxy đang được bật cho chế độ toàn quyền.", "error");
-    return;
-  }
-
   // Get selected group from dropdown
   const selectedGroup = els.singleGroupSelect?.value || "";
   const selectedGroups = selectedGroup ? [selectedGroup] : [];
@@ -1878,30 +1858,11 @@ els.btnStartBatch?.addEventListener('click', async () => {
 
   const proxyList = proxyListText.split('\n').map(p => p.trim()).filter(p => p);
 
-  if (proxyList.length > 0 && !licenseState?.features?.proxy) {
-    showStatus("Proxy đang được bật cho chế độ toàn quyền.", "error");
-    return;
-  }
-
   if (!programPath) { showStatus("Vui lòng nhập đường dẫn app gốc!", "error"); return; }
   if (!exeName) { showStatus("Vui lòng nhập tên file .exe!", "error"); return; }
   if (!cloneDir) { showStatus("Vui lòng chọn thư mục lưu clone!", "error"); return; }
   if (!batchPassword) { showStatus("Vui lòng nhập mật khẩu cho Profile hàng loạt!", "error"); return; }
   if (count < 1 || count > 500) { showStatus("Số lượng tạo phải từ 1 đến 500!", "error"); return; }
-
-  if (!licenseState?.features?.batch) {
-    showStatus("Tính năng tạo hàng loạt đang được bật cho chế độ toàn quyền.", "error");
-    return;
-  }
-
-  if (licenseState.limits?.maxClones !== Infinity) {
-    const max = licenseState.limits?.maxClones || 500;
-    const current = trackedClones.length;
-    if (current + count > max) {
-      showStatus(`Không thể tạo thêm ${count} bản sao trong phiên hiện tại.`, "error");
-      return;
-    }
-  }
 
   let sourcePath = programPath;
   if (!sourcePath.toLowerCase().endsWith('.exe')) {
@@ -2217,104 +2178,13 @@ els.inputNewGroup?.addEventListener('keypress', (e) => {
 // ACCESS / ACCOUNT TAB
 // =============================================================================
 
-async function loadLicenseStatus() {
-  if (!window.licenseAPI) return;
-  try {
-    const result = await window.licenseAPI.verify();
-    licenseState = {
-      activated: true,
-      valid: true,
-      tier: result.tier || 'free',
-      tierName: result.tierName || 'Toàn quyền',
-      limits: result.limits || { maxClones: Infinity, batchCreate: true, name: 'Toàn quyền' },
-      features: result.features || { batch: true, proxy: true }
-    };
-    updateLicenseUI(licenseState);
-  } catch (e) {
-    console.error('Failed to verify access status:', e);
-    // Nếu lỗi mạng, fallback về getStatus (offline mode)
-    try {
-      const status = await window.licenseAPI.getStatus();
-      licenseState = status;
-      updateLicenseUI(status);
-    } catch (e2) {
-      console.error('Failed to get access status:', e2);
-    }
-  }
-}
-
-function updateLicenseUI(status) {
-  const tierMap = {
-    free: { name: 'Toàn quyền', badge: 'Đã mở khóa', color: 'bg-gradient-to-r from-neon-green to-neon-blue text-black' },
-    plus: { name: 'Plus', badge: 'Plus', color: 'bg-neon-purple text-white' },
-    ultra: { name: 'Ultra', badge: 'Ultra 🚀', color: 'bg-gradient-to-r from-neon-purple to-neon-blue text-white' }
-  };
-
-  const tier = (status.tier || 'free').toLowerCase();
-  const info = tierMap[tier] || tierMap.free;
-
-  if (els.licenseTierName) els.licenseTierName.textContent = info.name;
-  if (els.licenseTierBadge) {
-    els.licenseTierBadge.textContent = info.badge;
-    els.licenseTierBadge.className = `px-4 py-2 rounded-full text-sm font-bold ${info.color}`;
-  }
-
-  // Icon color based on tier
-  if (els.licenseTierIcon) {
-    const icon = els.licenseTierIcon.querySelector('span');
-    if (tier === 'ultra' || tier === 'free') {
-      els.licenseTierIcon.className = 'size-12 rounded-full bg-gradient-to-r from-neon-purple to-neon-blue flex items-center justify-center';
-      if (icon) icon.className = 'material-symbols-outlined text-[24px] text-white';
-    } else if (tier === 'plus') {
-      els.licenseTierIcon.className = 'size-12 rounded-full bg-neon-purple flex items-center justify-center';
-      if (icon) icon.className = 'material-symbols-outlined text-[24px] text-white';
-    } else {
-      els.licenseTierIcon.className = 'size-12 rounded-full bg-slate-700 flex items-center justify-center';
-      if (icon) icon.className = 'material-symbols-outlined text-[24px] text-slate-400';
-    }
-  }
-
-  // Expiry date (hide for free tier)
-  if (els.licenseExpiryRow) {
-    if (status.expiresAt && tier !== 'free') {
-      els.licenseExpiryRow.classList.remove('hidden');
-      els.licenseExpiryRow.classList.add('flex');
-      if (els.licenseExpiryDate) {
-        const date = new Date(status.expiresAt);
-        els.licenseExpiryDate.textContent = date.toLocaleDateString('vi-VN');
-      }
-    } else {
-      els.licenseExpiryRow.classList.add('hidden');
-      els.licenseExpiryRow.classList.remove('flex');
-    }
-  }
-
-  // Clone usage
-  const cloneCount = trackedClones.length;
-  // Ultra tier = unlimited, JSON does not support Infinity so check tier directly
-  let maxClones = Infinity;
-  if (tier === 'ultra' || tier === 'free') {
-    maxClones = Infinity;
-  } else if (tier === 'plus') {
-    maxClones = 20;
-  } else {
-    maxClones = status.limits?.maxClones ?? 5;
-  }
-
-  if (els.licenseCloneUsed) els.licenseCloneUsed.textContent = cloneCount;
-  if (els.licenseCloneLimit) {
-    els.licenseCloneLimit.textContent = maxClones === Infinity ? '∞' : maxClones;
-  }
-}
-
 function canCreateMoreClones() {
   return true;
 }
 
-// Account/License Tab Event Listeners
+// Account Tab Event Listeners
 els.navAccount?.addEventListener('click', () => {
   switchView('view-account');
-  loadLicenseStatus();
   updateNavState('nav-account');
 });
 
@@ -2342,58 +2212,6 @@ els.btnCopyDonateMessage?.addEventListener('click', async () => {
 });
 
 // BLOCKING MODAL cho key bị BAN/REVOKE - KHÔNG CHO ĐÓNG
-function showBlockingBannedModal(errorMessage) {
-  // Xóa modal cũ nếu có
-  document.getElementById('banned-modal')?.remove();
-
-  const modal = document.createElement('div');
-  modal.id = 'banned-modal';
-  modal.className = 'fixed inset-0 bg-slate-950/90 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm';
-  modal.innerHTML = `
-    <div class="bg-[#1e293b] p-8 rounded-2xl border border-emerald-500/50 max-w-md text-center shadow-2xl relative overflow-hidden">
-      <div class="absolute inset-0 bg-emerald-500/10 pointer-events-none"></div>
-      <div class="text-6xl mb-4">✅</div>
-      <h2 class="text-2xl font-bold text-emerald-400 mb-2">Toàn quyền đang hoạt động</h2>
-      <p class="text-gray-400 mb-6">${errorMessage || 'Cơ chế khóa license đã được gỡ bỏ.'}</p>
-      <button id="btn-close-free-full-modal" class="px-8 py-3 bg-gradient-to-r from-emerald-600 to-blue-500 hover:from-emerald-500 hover:to-blue-400 text-white rounded-xl font-bold transition-all transform hover:scale-105 shadow-lg w-full">
-        Đóng
-      </button>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  document.getElementById('btn-close-free-full-modal')?.addEventListener('click', () => {
-    modal.remove();
-  });
-}
-
-function showNuclearModal(errorMessage) {
-  // Xóa modal cũ
-  document.getElementById('banned-modal')?.remove();
-
-  const modal = document.createElement('div');
-  modal.className = 'fixed inset-0 bg-slate-950/90 z-[999999] flex items-center justify-center p-4 backdrop-blur-md';
-  modal.innerHTML = `
-    <div class="bg-[#1e293b] p-10 rounded-3xl border-2 border-emerald-500/60 text-center shadow-[0_0_80px_rgba(16,185,129,0.25)] max-w-2xl relative overflow-hidden">
-      <div class="text-8xl mb-6">🛡️</div>
-      <h2 class="text-4xl font-black text-emerald-400 mb-4 tracking-widest uppercase">FULL ACCESS</h2>
-      <p class="text-white text-xl mb-8">${errorMessage || 'Chế độ bảo vệ phá hủy đã được tắt.'}</p>
-      <button id="btn-close-nuclear-disabled-modal" class="px-8 py-3 bg-gradient-to-r from-emerald-600 to-blue-500 hover:from-emerald-500 hover:to-blue-400 text-white rounded-xl font-bold transition-all shadow-lg">
-        Đóng
-      </button>
-    </div>
-  `;
-  document.body.appendChild(modal);
-  document.getElementById('btn-close-nuclear-disabled-modal')?.addEventListener('click', () => {
-    modal.remove();
-  });
-}
-
-function checkExpiry() {
-  document.getElementById('expiry-modal')?.remove();
-  document.getElementById('expiry-toast')?.remove();
-}
-
 // Initialization
 (async function init() {
   await resolveKnownAssetUrls();
@@ -2405,7 +2223,6 @@ function checkExpiry() {
   await loadGroups();
   await loadUsers();
   await loadClones();
-  await loadLicenseStatus();
   if (globalAppSettings.autoUpdateEnabled) {
     handleCheckUpdate({ silent: true, autoDownload: true });
   }
