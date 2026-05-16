@@ -44,3 +44,28 @@ Clone App/source/launcher/build/
 Clone App/source/launcher/__pycache__/
 Clone App/source/logs/
 Clone App/source/launcher/logs/
+
+# Launcher build artifacts
+Clone App/source/launcher/dist/
+Clone App/source/launcher/*.spec
+
+# Debug logs
+launcher_exec.log
+**/error.log
+**/proxy_launch_*.bat
+
+# Local data
+Clone App/logs/
+Clone App/source/ui-data/
+
+# Tooling & local config (not for OSS)
+.claude/
+.gitnexus/
+.ruff_cache/
+AGENTS.md
+
+# Outdated docs (will be rewritten in Phase 3)
+docs/
+BUILD_AND_RELEASE.md
+PLAN_FIX_CMD_AND_PORTABLE.md
+SECURITY_RELEASE_CHECKLIST.md
