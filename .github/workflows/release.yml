@@ -43,8 +43,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install pyinstaller
-        run: pip install pyinstaller
+      - name: Install Python build deps
+        run: pip install pyinstaller cryptography
 
       - name: Install npm deps
         working-directory: 'Clone App/source/ui'
