@@ -215,7 +215,11 @@ Mật khẩu Windows user được lưu qua Windows Credential Manager (DPAPI), 
 
 Issues và Pull Requests luôn được chào đón. Nếu bạn tìm thấy bug hoặc có ý tưởng feature mới, hãy [mở issue](https://github.com/baohh2504-cmd/clone-app/issues).
 
-> CONTRIBUTING.md sẽ được bổ sung sau.
+Xem [CONTRIBUTING.md](CONTRIBUTING.md) để biết chi tiết về dev setup, commit convention, và PR process.
+
+## Security
+
+Báo lỗi security private qua [GitHub Security Advisory](https://github.com/baohh2504-cmd/clone-app/security/advisories/new) — KHÔNG dùng Issues công khai. Xem [SECURITY.md](SECURITY.md).
 
 ---
 
