@@ -1,6 +1,6 @@
 {
   "name": "runas-launcher-ui",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Minimal Electron UI that wraps the Python run-as launcher.",
   "repository": {
     "type": "git",

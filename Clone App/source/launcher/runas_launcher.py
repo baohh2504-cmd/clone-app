@@ -1770,6 +1770,7 @@ def create_proxy_wrapper(
     exe_cmd = subprocess.list2cmdline([str(exe), *args])
 
     batch_content = [
+        "chcp 65001 > nul",
         "@echo off",
         f'echo --- NEW RUN {uuid.uuid4().hex} --- >> "{log_path}"',
         f'echo Setting Proxy to {proxy_address}... >> "{log_path}"',
@@ -1807,7 +1808,7 @@ def create_proxy_wrapper(
         [f'echo Launching: {exe_cmd} >> "{log_path}"', f'start "" {exe_cmd}', "exit"]
     )
 
-    wrapper_path.write_text("\n".join(batch_content), encoding="utf-8")
+    wrapper_path.write_text("\n".join(batch_content), encoding="utf-8-sig")
     return f'"{str(wrapper_path)}"'
 
 
@@ -1823,6 +1824,7 @@ def create_clear_proxy_wrapper(exe: Path, args: list[str], working_dir: str) -> 
     exe_cmd = subprocess.list2cmdline([str(exe), *args])
 
     batch_content = [
+        "chcp 65001 > nul",
         "@echo off",
         f'echo --- NEW RUN (CLEAR PROXY) {uuid.uuid4().hex} --- >> "{log_path}"',
         # Disable Proxy
@@ -1838,7 +1840,7 @@ def create_clear_proxy_wrapper(exe: Path, args: list[str], working_dir: str) -> 
 
     batch_content.extend([f'start "" {exe_cmd}', "exit"])
 
-    wrapper_path.write_text("\n".join(batch_content), encoding="utf-8")
+    wrapper_path.write_text("\n".join(batch_content), encoding="utf-8-sig")
     return f'"{str(wrapper_path)}"'
 
 
