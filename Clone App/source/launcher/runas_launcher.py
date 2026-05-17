@@ -207,7 +207,12 @@ try:
     )
 
     USE_ENCRYPTED_CONFIG = True
-except ImportError:
+except ImportError as exc:
+    print(
+        f"[runas_launcher] WARNING: config_crypto module unavailable ({exc}); "
+        f"falling back to plaintext registry. This indicates a packaging bug.",
+        file=sys.stderr,
+    )
     USE_ENCRYPTED_CONFIG = False
 
 # Legacy path (for migration)

@@ -1,6 +1,6 @@
 {
   "name": "runas-launcher-ui",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "Minimal Electron UI that wraps the Python run-as launcher.",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   "scripts": {
     "start": "electron .",
     "checksum": "node scripts/generate-checksums.js release",
-    "build:launcher": "cd ../launcher && pyinstaller --onefile --noconsole --noconfirm --clean --specpath build runas_launcher.py",
+    "build:launcher": "cd ../launcher && pyinstaller --onefile --noconsole --noconfirm --clean --specpath build --hidden-import=config_crypto runas_launcher.py",
     "pack:win": "npm run build:launcher && electron-packager . \"Clone App\" --platform=win32 --arch=x64 --out dist --overwrite --icon=assets/icon.ico --extra-resource=../launcher",
     "dist:win": "npm run build:launcher && electron-builder --win nsis --x64 --publish never"
   },
